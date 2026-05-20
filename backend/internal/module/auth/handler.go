@@ -3,8 +3,8 @@ package auth
 import (
 	"errors"
 
-	"github.com/gin-gonic/gin"
 	"github.com/KistametL/WMS/backend/pkg/response"
+	"github.com/gin-gonic/gin"
 )
 
 type Handler struct {
