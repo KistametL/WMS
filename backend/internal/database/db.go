@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/KistametL/WMS/backend/internal/config"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func NewPool(cfg *config.Config) (*pgxpool.Pool, error) {

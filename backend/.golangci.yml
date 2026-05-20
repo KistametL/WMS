@@ -1,0 +1,28 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    # Bugs — จับ error จริงๆ
+    - errcheck       # ลืม check error return value
+    - govet          # Go's built-in vet
+    - ineffassign    # assign variable แต่ไม่ได้ใช้
+    - staticcheck    # advanced static analysis (ครอบคลุมมาก)
+    - unused         # code/variable ที่ไม่ถูกใช้
+
+    # Security
+    - gosec          # ตรวจ security issues (hardcoded secrets, SQL injection ฯลฯ)
+
+formatters:
+  enable:
+    - gofmt          # format ถูกต้องตาม Go standard
+    - goimports      # import เรียงถูก + ไม่มี unused imports
+
+linters-settings:
+  gosec:
+    excludes:
+      - G114 # Use of net/http serve function with no timeout — จัดการใน app code เอง
+
+issues:
+  exclude-dirs:
+    - internal/database/generated  # ไม่ตรวจ generated code (sqlc สร้างให้)

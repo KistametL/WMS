@@ -66,9 +66,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 	}
 
 	permNames := make([]string, len(permissions))
-	for i, p := range permissions {
-		permNames[i] = p
-	}
+	copy(permNames, permissions)
 
 	accessToken, err := s.generateAccessToken(user.ID.String(), user.Email, roleNames, permNames)
 	if err != nil {
@@ -116,9 +114,7 @@ func (s *Service) RefreshToken(ctx context.Context, req RefreshRequest) (*Refres
 		roleNames[i] = r.Name
 	}
 	permNames := make([]string, len(permissions))
-	for i, p := range permissions {
-		permNames[i] = p
-	}
+	copy(permNames, permissions)
 
 	accessToken, err := s.generateAccessToken(user.ID.String(), user.Email, roleNames, permNames)
 	if err != nil {
