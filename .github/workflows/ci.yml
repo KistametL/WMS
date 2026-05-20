@@ -33,7 +33,7 @@ jobs:
       # golangci-lint คือ industry standard สำหรับ Go
       # รวม 100+ linter: unused vars, unchecked errors, security issues ฯลฯ
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           version: v2.12.2
           working-directory: backend
