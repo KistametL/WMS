@@ -35,7 +35,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v2.12.2
           working-directory: backend
 
   # Job 2: Build + Test — รัน parallel กับ lint
