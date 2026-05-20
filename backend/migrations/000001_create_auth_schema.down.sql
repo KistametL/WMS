@@ -1,0 +1,2 @@
+DROP SCHEMA IF EXISTS auth CASCADE;
+DROP FUNCTION IF EXISTS update_updated_at();
