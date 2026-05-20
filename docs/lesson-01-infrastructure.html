@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WMS — Lesson 01: Infrastructure & Backend Setup</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      line-height: 1.7;
+      font-size: 16px;
+    }
+
+    .sidebar {
+      position: fixed;
+      top: 0; left: 0;
+      width: 260px; height: 100vh;
+      background: #1a1d27;
+      border-right: 1px solid #2d3148;
+      overflow-y: auto;
+      padding: 24px 0;
+      z-index: 100;
+    }
+
+    .sidebar h2 {
+      font-size: 12px;
+      font-weight: 600;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      padding: 0 20px 12px;
+    }
+
+    .sidebar a {
+      display: block;
+      padding: 8px 20px;
+      color: #9ca3af;
+      text-decoration: none;
+      font-size: 14px;
+      border-left: 3px solid transparent;
+      transition: all 0.15s;
+    }
+
+    .sidebar a:hover { color: #e2e8f0; background: #252837; }
+    .sidebar a.active { color: #818cf8; border-left-color: #818cf8; background: #1e2035; }
+
+    .main {
+      margin-left: 260px;
+      max-width: 860px;
+      padding: 48px 48px 120px;
+    }
+
+    .hero {
+      margin-bottom: 56px;
+      padding-bottom: 32px;
+      border-bottom: 1px solid #2d3148;
+    }
+
+    .hero .badge {
+      display: inline-block;
+      background: #1e2035;
+      color: #818cf8;
+      border: 1px solid #3730a3;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 12px;
+      margin-bottom: 16px;
+      letter-spacing: 0.05em;
+    }
+
+    .hero h1 {
+      font-size: 36px;
+      font-weight: 700;
+      color: #f1f5f9;
+      margin-bottom: 12px;
+      line-height: 1.2;
+    }
+
+    .hero p {
+      color: #94a3b8;
+      font-size: 17px;
+      max-width: 600px;
+    }
+
+    .progress {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 24px;
+    }
+
+    .step-badge {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .step-badge.done { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+    .step-badge.next { background: #1e1b4b; color: #a5b4fc; border: 1px solid #3730a3; }
+
+    section { margin-bottom: 64px; }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .section-num {
+      width: 36px; height: 36px;
+      background: #818cf8;
+      color: #fff;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700;
+      font-size: 15px;
+      flex-shrink: 0;
+    }
+
+    h2 {
+      font-size: 24px;
+      font-weight: 700;
+      color: #f1f5f9;
+    }
+
+    h3 {
+      font-size: 17px;
+      font-weight: 600;
+      color: #e2e8f0;
+      margin: 28px 0 10px;
+    }
+
+    p { color: #94a3b8; margin-bottom: 12px; }
+
+    .why-box {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-left: 3px solid #818cf8;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin: 16px 0;
+    }
+
+    .why-box .label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #818cf8;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+
+    .why-box p { color: #cbd5e1; margin: 0; font-size: 14px; }
+
+    .warn-box {
+      background: #1c1407;
+      border: 1px solid #713f12;
+      border-left: 3px solid #f59e0b;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin: 16px 0;
+    }
+
+    .warn-box .label { font-size: 11px; font-weight: 700; color: #f59e0b; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+    .warn-box p { color: #fde68a; margin: 0; font-size: 14px; }
+
+    .code-block {
+      background: #0d1117;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      margin: 16px 0;
+      overflow: hidden;
+    }
+
+    .code-block .code-header {
+      background: #161b22;
+      padding: 8px 16px;
+      font-size: 12px;
+      color: #6b7280;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #2d3148;
+    }
+
+    .code-block .code-header .lang {
+      color: #818cf8;
+      font-weight: 600;
+      font-size: 11px;
+    }
+
+    .code-block pre {
+      padding: 20px;
+      overflow-x: auto;
+      font-family: 'JetBrains Mono', 'Fira Code', 'Menlo', monospace;
+      font-size: 13.5px;
+      line-height: 1.6;
+      color: #e2e8f0;
+    }
+
+    .code-block pre .comment { color: #6b7280; }
+    .code-block pre .keyword { color: #818cf8; }
+    .code-block pre .string { color: #34d399; }
+    .code-block pre .value { color: #f59e0b; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+
+    th {
+      background: #1a1d27;
+      color: #818cf8;
+      font-weight: 600;
+      text-align: left;
+      padding: 10px 14px;
+      border-bottom: 2px solid #2d3148;
+    }
+
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid #1e2035;
+      color: #94a3b8;
+    }
+
+    tr:hover td { background: #1a1d27; }
+
+    td code, p code {
+      background: #1e2035;
+      color: #a5b4fc;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'Menlo', monospace;
+      font-size: 13px;
+    }
+
+    .flow-diagram {
+      background: #0d1117;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      padding: 24px;
+      margin: 16px 0;
+      font-family: 'Menlo', monospace;
+      font-size: 13px;
+      color: #94a3b8;
+      line-height: 2;
+    }
+
+    .flow-diagram .highlight { color: #818cf8; font-weight: 600; }
+    .flow-diagram .green { color: #4ade80; }
+    .flow-diagram .yellow { color: #f59e0b; }
+
+    .checklist { list-style: none; margin: 12px 0; }
+    .checklist li {
+      padding: 6px 0 6px 28px;
+      position: relative;
+      color: #94a3b8;
+      font-size: 14px;
+    }
+    .checklist li::before {
+      content: '✓';
+      position: absolute;
+      left: 0;
+      color: #4ade80;
+      font-weight: 700;
+    }
+
+    .divider {
+      height: 1px;
+      background: #2d3148;
+      margin: 48px 0;
+    }
+
+    .next-section {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 12px;
+      padding: 24px;
+      margin-top: 48px;
+    }
+
+    .next-section h3 { margin-top: 0; color: #818cf8; }
+    .next-section ol { padding-left: 20px; color: #94a3b8; font-size: 14px; }
+    .next-section ol li { padding: 4px 0; }
+  </style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <h2>WMS Lessons</h2>
+  <a href="#nginx" class="active">2. Nginx Reverse Proxy</a>
+  <a href="#database">3. PostgreSQL + Redis</a>
+  <a href="#architecture">4. Architecture Decisions</a>
+  <a href="#schema">5. Database Schema</a>
+  <a href="#backend">6. Go Backend</a>
+  <a href="#cicd">7. CI/CD Pipeline</a>
+  <a href="#next">→ ขั้นตอนต่อไป</a>
+</nav>
+
+<div class="main">
+
+  <div class="hero">
+    <div class="badge">LESSON 01</div>
+    <h1>Infrastructure &amp; Backend Setup</h1>
+    <p>ตั้งแต่ server เปล่าจนถึง Go API พร้อม CI/CD pipeline — ทุก decision มีเหตุผล</p>
+
+    <div class="progress">
+      <span class="step-badge done">✓ Nginx</span>
+      <span class="step-badge done">✓ PostgreSQL + Redis</span>
+      <span class="step-badge done">✓ Database Schema</span>
+      <span class="step-badge done">✓ Auth API</span>
+      <span class="step-badge done">✓ CI/CD</span>
+      <span class="step-badge next">→ JWT Middleware</span>
+    </div>
+  </div>
+
+  <!-- ===== SECTION 2: NGINX ===== -->
+  <section id="nginx">
+    <div class="section-header">
+      <div class="section-num">2</div>
+      <h2>Nginx — Reverse Proxy</h2>
+    </div>
+
+    <div class="why-box">
+      <div class="label">ทำไมต้องมี Nginx?</div>
+      <p>Nginx คือ "พนักงานต้อนรับ" ของ server รับ request ทุกอันเข้ามาที่ port 80 แล้วส่งต่อให้ service ที่ถูกต้อง ทำให้เปิดแค่ port เดียว จัดการ HTTPS ที่เดียว และป้องกัน service จริงไม่ให้เจอ internet โดยตรง</p>
+    </div>
+
+    <div class="flow-diagram">
+<span class="highlight">Browser</span> → <span class="green">Nginx :80/:443</span>
+              ├── /         → <span class="yellow">Next.js :3000</span>
+              ├── /api      → <span class="yellow">Go Backend :8000</span>
+              └── /pihole   → <span class="yellow">Pi-hole :8080</span>
+    </div>
+
+    <h3>docker-compose.yml</h3>
+    <div class="code-block">
+      <div class="code-header"><span>~/services/webserver/docker-compose.yml</span><span class="lang">YAML</span></div>
+      <pre>services:
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    restart: unless-stopped
+    ports:
+      - <span class="string">"80:80"</span>          <span class="comment"># port เดียวที่เปิดออก</span>
+    volumes:
+      - ./conf.d:/etc/nginx/conf.d  <span class="comment"># config files</span>
+      - ./html:/usr/share/nginx/html
+    networks:
+      - proxy            <span class="comment"># network ร่วมกับ service อื่น</span>
+
+networks:
+  proxy:
+    name: proxy
+    driver: bridge</pre>
+    </div>
+
+    <h3>conf.d/default.conf — Security Best Practices</h3>
+    <div class="code-block">
+      <div class="code-header"><span>~/services/webserver/conf.d/default.conf</span><span class="lang">NGINX</span></div>
+      <pre>server {
+    listen 80;
+    server_name _;
+
+    <span class="comment"># ซ่อน version Nginx — hacker จะไม่รู้ว่าใช้ version อะไร</span>
+    server_tokens off;
+
+    <span class="comment"># บีบอัดไฟล์ก่อนส่ง browser ประหยัด bandwidth ~70%</span>
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript;
+    gzip_min_length 1000;
+
+    <span class="comment"># Security headers — ป้องกัน Clickjacking และ XSS</span>
+    add_header X-Frame-Options <span class="string">"SAMEORIGIN"</span>;
+    add_header X-XSS-Protection <span class="string">"1; mode=block"</span>;
+    add_header X-Content-Type-Options <span class="string">"nosniff"</span>;
+
+    location / {
+        <span class="comment"># ตัดการเชื่อมต่อถ้า backend ค้างเกิน 30 วินาที</span>
+        proxy_read_timeout 30s;
+        proxy_connect_timeout 30s;
+
+        <span class="comment"># ต่อไปจะเปลี่ยนเป็น proxy_pass http://backend:8000</span>
+        return 200 <span class="string">'Nginx is running'</span>;
+    }
+}</pre>
+    </div>
+
+    <div class="warn-box">
+      <div class="label">ไม่ทำได้ไหม?</div>
+      <p>ได้ แต่ต้องเปิดหลาย port (3000, 8000, 8080...) ออก internet, HTTPS ซับซ้อนมาก, และ service แต่ละตัวเจอ attack โดยตรง</p>
+    </div>
+
+    <h3>คำสั่งที่ใช้</h3>
+    <div class="code-block">
+      <div class="code-header"><span>Terminal — Server</span><span class="lang">BASH</span></div>
+      <pre><span class="comment"># Start</span>
+docker compose up -d
+
+<span class="comment"># Reload config โดยไม่ restart (zero downtime)</span>
+docker compose exec nginx nginx -s reload
+
+<span class="comment"># ทดสอบ</span>
+curl http://localhost</pre>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ===== SECTION 3: DATABASE ===== -->
+  <section id="database">
+    <div class="section-header">
+      <div class="section-num">3</div>
+      <h2>PostgreSQL + Redis</h2>
+    </div>
+
+    <div class="why-box">
+      <div class="label">ทำไมต้อง 2 database?</div>
+      <p><strong style="color:#e2e8f0">PostgreSQL</strong> — ข้อมูลหลักทั้งหมด (users, orders, stock) รองรับ ACID transaction สำคัญมากสำหรับ WMS<br/>
+      <strong style="color:#e2e8f0">Redis</strong> — เก็บ session, refresh token, cache — เร็วมากเพราะอยู่ใน memory</p>
+    </div>
+
+    <h3>ทำไม PostgreSQL ไม่ใช่ MySQL</h3>
+    <table>
+      <tr><th>Feature</th><th>ความสำคัญกับ WMS</th></tr>
+      <tr><td><strong>ACID Transaction</strong></td><td>หัก stock + สร้าง order ต้องเกิดพร้อมกัน ถ้า error ต้องย้อนกลับทั้งหมด</td></tr>
+      <tr><td><strong>Row-level Locking</strong></td><td>ลูกค้า 2 คนซื้อพร้อมกัน — PostgreSQL ล็อก row ป้องกัน oversell</td></tr>
+      <tr><td><strong>NUMERIC(15,2)</strong></td><td>ใช้แทน FLOAT สำหรับเงินเสมอ — FLOAT มี floating point error</td></tr>
+      <tr><td><strong>JSONB support</strong></td><td>เก็บ Shopee/Lazada raw data ที่ format ต่างกันได้ใน column เดียว</td></tr>
+    </table>
+
+    <h3>docker-compose.yml</h3>
+    <div class="code-block">
+      <div class="code-header"><span>~/services/database/docker-compose.yml</span><span class="lang">YAML</span></div>
+      <pre>services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: <span class="string">"${POSTGRES_USER}"</span>     <span class="comment"># อ่านจาก .env</span>
+      POSTGRES_PASSWORD: <span class="string">"${POSTGRES_PASSWORD}"</span>
+      POSTGRES_DB: <span class="string">"${POSTGRES_DB}"</span>
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    ports:
+      - <span class="string">"127.0.0.1:5432:5432"</span>   <span class="comment"># เข้าได้แค่จาก server เอง!</span>
+    networks:
+      - proxy
+    healthcheck:
+      test: [<span class="string">"CMD-SHELL"</span>, <span class="string">"pg_isready -U ${POSTGRES_USER}"</span>]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512m    <span class="comment"># ป้องกัน RAM หมดทั้ง server</span>
+          cpus: <span class="string">'0.50'</span>
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    command: redis-server --requirepass <span class="string">"${REDIS_PASSWORD}"</span>
+    volumes:
+      - ./data/redis:/data
+    networks:
+      - proxy
+    healthcheck:
+      test: [<span class="string">"CMD"</span>, <span class="string">"redis-cli"</span>, <span class="string">"-a"</span>, <span class="string">"${REDIS_PASSWORD}"</span>, <span class="string">"ping"</span>]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: <span class="string">'0.25'</span></pre>
+    </div>
+
+    <div class="warn-box">
+      <div class="label">ทำไม 127.0.0.1 ไม่ใช่ 0.0.0.0?</div>
+      <p><code>0.0.0.0:5432</code> = ทุกคนใน network เข้า database ได้โดยตรง bot scan เจอและ brute force ได้ตลอด<br/>
+      <code>127.0.0.1:5432</code> = เข้าได้แค่จาก server เอง ต้องผ่าน SSH tunnel เท่านั้น = Defense in Depth</p>
+    </div>
+
+    <h3>SSH Tunnel — เชื่อม Mac กับ Database บน Server</h3>
+    <div class="code-block">
+      <div class="code-header"><span>Terminal — Mac</span><span class="lang">BASH</span></div>
+      <pre><span class="comment"># วิธีปกติ (ต้องพิมพ์ทุกครั้ง)</span>
+ssh -L 5432:127.0.0.1:5432 kistamet@192.168.1.200 -N
+
+<span class="comment"># วิธีที่ดีกว่า — ตั้ง SSH Config (~/.ssh/config)</span>
+Host home-server
+    HostName 192.168.1.200
+    User kistamet
+    LocalForward 5432 127.0.0.1:5432
+    LocalForward 6379 127.0.0.1:6379
+    ServerAliveInterval 60
+
+<span class="comment"># แล้วใช้แค่นี้</span>
+ssh home-server -N</pre>
+    </div>
+
+    <h3>Backup อัตโนมัติ</h3>
+    <div class="code-block">
+      <div class="code-header"><span>~/services/database/backup.sh</span><span class="lang">BASH</span></div>
+      <pre>#!/bin/bash
+set -e
+
+source /home/kistamet/services/database/.env
+
+BACKUP_DIR=<span class="string">"/home/kistamet/backups/database"</span>
+DATE=$(date +%Y%m%d_%H%M%S)
+FILE=<span class="string">"$BACKUP_DIR/wms_db_$DATE.sql.gz"</span>
+
+docker compose -f /home/kistamet/services/database/docker-compose.yml \
+  exec -T postgres pg_dump -U <span class="string">"$POSTGRES_USER"</span> <span class="string">"$POSTGRES_DB"</span> | gzip > <span class="string">"$FILE"</span>
+
+<span class="comment"># เก็บแค่ 7 วันล่าสุด</span>
+find <span class="string">"$BACKUP_DIR"</span> -name <span class="string">"*.sql.gz"</span> -mtime +7 -delete
+
+echo <span class="string">"Backup saved: $FILE"</span></pre>
+    </div>
+    <div class="code-block">
+      <div class="code-header"><span>Crontab — รัน backup ทุกตี 2</span><span class="lang">CRON</span></div>
+      <pre>0 2 * * * /home/kistamet/services/database/backup.sh >> /home/kistamet/backups/database/backup.log 2>&1</pre>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ===== SECTION 4: ARCHITECTURE ===== -->
+  <section id="architecture">
+    <div class="section-header">
+      <div class="section-num">4</div>
+      <h2>Architecture Decisions</h2>
+    </div>
+
+    <h3>Modular Monolith — ไม่ใช่ Microservices</h3>
+    <div class="why-box">
+      <div class="label">ทำไม?</div>
+      <p>Microservices ออกแบบมาสำหรับหลายทีมทำงานแยกกัน สำหรับ 2,000 orders/วัน monolith รับได้สบาย การทำ microservices ตั้งแต่แรกจะ slow down development 3-5x แต่แบ่ง module ชัดเจน สามารถ extract ออกเป็น service ทีหลังได้</p>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span>Backend Structure</span><span class="lang">TEXT</span></div>
+      <pre>backend/
+├── cmd/api/main.go          <span class="comment"># entry point</span>
+├── internal/
+│   ├── config/              <span class="comment"># โหลด .env</span>
+│   ├── database/            <span class="comment"># connection + sqlc generated</span>
+│   ├── middleware/          <span class="comment"># JWT, logging, rate limit</span>
+│   └── module/
+│       ├── auth/            <span class="comment"># login, refresh, logout</span>
+│       ├── product/         <span class="comment"># SKU, barcode</span>
+│       ├── inventory/       <span class="comment"># stock in/out, reservation</span>
+│       ├── order/           <span class="comment"># order intake, status</span>
+│       ├── fulfillment/     <span class="comment"># pick → pack → ship</span>
+│       ├── pos/             <span class="comment"># scan to sell</span>
+│       └── channel/         <span class="comment"># Shopee/Lazada/TikTok adapter</span>
+├── migrations/              <span class="comment"># SQL migration files</span>
+├── pkg/response/            <span class="comment"># standard API response</span>
+└── sqlc.yaml                <span class="comment"># sqlc config</span></pre>
+    </div>
+
+    <h3>sqlc แทน GORM</h3>
+    <table>
+      <tr><th></th><th>GORM</th><th>sqlc</th></tr>
+      <tr><td>SQL ที่รันจริง</td><td>❌ GORM ตัดสินใจให้</td><td>✅ เราเขียนเอง</td></tr>
+      <tr><td>Type-safe</td><td>⚠️ บางส่วน</td><td>✅ compile-time check</td></tr>
+      <tr><td>SQL injection</td><td>✅ ปลอดภัย</td><td>✅ parameterized query</td></tr>
+      <tr><td>Query ซับซ้อน</td><td>❌ ต้องหนีไป raw SQL</td><td>✅ เขียน SQL ตรงได้เลย</td></tr>
+      <tr><td>ใช้จริงที่</td><td>Startups ทั่วไป</td><td>Khanacademy, PlanetScale</td></tr>
+    </table>
+
+    <h3>Multi-Channel Architecture</h3>
+    <div class="code-block">
+      <div class="code-header"><span>internal/module/channel/adapter.go</span><span class="lang">GO</span></div>
+      <pre><span class="comment">// Interface กลาง — แต่ละ channel implement เหมือนกัน</span>
+<span class="keyword">type</span> ChannelAdapter <span class="keyword">interface</span> {
+    FetchOrders() ([]Order, error)
+    UpdateStock(sku <span class="keyword">string</span>, qty <span class="keyword">int</span>) error
+    ConfirmShipment(orderID <span class="keyword">string</span>) error
+}
+
+<span class="comment">// เพิ่ม channel ใหม่ไม่กระทบ code เก่า</span>
+<span class="keyword">type</span> ShopeeAdapter  <span class="keyword">struct</span>{...}  <span class="comment">// implement ChannelAdapter</span>
+<span class="keyword">type</span> LazadaAdapter  <span class="keyword">struct</span>{...}  <span class="comment">// implement ChannelAdapter</span>
+<span class="keyword">type</span> TikTokAdapter  <span class="keyword">struct</span>{...}  <span class="comment">// implement ChannelAdapter</span></pre>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ===== SECTION 5: SCHEMA ===== -->
+  <section id="schema">
+    <div class="section-header">
+      <div class="section-num">5</div>
+      <h2>Database Schema</h2>
+    </div>
+
+    <p>แบ่ง 19 tables ใน 5 schemas — แทนที่จะใช้ prefix เช่น <code>auth_users</code> ใช้ <code>auth.users</code> แทน</p>
+
+    <h3>ทำไมต้องแยก Schema</h3>
+    <div class="code-block">
+      <div class="code-header"><span>Django style vs Schema style</span><span class="lang">TEXT</span></div>
+      <pre><span class="comment"># Django — ทุกอย่างรวมกัน</span>
+auth_users, auth_roles, product_skus, order_items...
+
+<span class="comment"># PostgreSQL Schema — จัดกลุ่มชัดเจน</span>
+auth.users      product.skus
+auth.roles      inventory.stock_levels
+auth.audit_logs order.orders</pre>
+    </div>
+
+    <h3>Inventory Schema — หัวใจของ WMS</h3>
+    <div class="code-block">
+      <div class="code-header"><span>migrations/000003_create_inventory_schema.up.sql</span><span class="lang">SQL</span></div>
+      <pre>CREATE TABLE inventory.stock_levels (
+    sku_id        UUID    NOT NULL UNIQUE,
+    qty_on_hand   INTEGER NOT NULL DEFAULT 0,
+    qty_reserved  INTEGER NOT NULL DEFAULT 0,
+
+    <span class="comment">-- คำนวณอัตโนมัติ ไม่มีทางผิดพลาด</span>
+    qty_available INTEGER GENERATED ALWAYS AS
+                  (qty_on_hand - qty_reserved) STORED,
+
+    <span class="comment">-- ป้องกันที่ database level ไม่ใช่แค่ application</span>
+    CONSTRAINT chk_no_negative    CHECK (qty_on_hand >= 0),
+    CONSTRAINT chk_no_over_reserve CHECK (qty_reserved <= qty_on_hand)
+);</pre>
+    </div>
+
+    <div class="why-box">
+      <div class="label">ทำไม qty_available เป็น GENERATED COLUMN?</div>
+      <p>ถ้าคำนวณใน application code — ถ้ามีคนแก้ qty_on_hand โดยตรงใน database ค่าจะไม่ sync กัน GENERATED COLUMN คำนวณโดย PostgreSQL เสมอ ไม่มีทางผิด</p>
+    </div>
+
+    <h3>Auth Schema — Security Design</h3>
+    <div class="code-block">
+      <div class="code-header"><span>migrations/000001_create_auth_schema.up.sql</span><span class="lang">SQL</span></div>
+      <pre><span class="comment">-- UUID แทน SERIAL — ป้องกัน enumerate ID (ไม่มี /users/1, /users/2)</span>
+CREATE TABLE auth.users (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email         VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,  <span class="comment">-- bcrypt hash เท่านั้น</span>
+    is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+    deleted_at    TIMESTAMPTZ,            <span class="comment">-- soft delete ลบจริงไม่ได้</span>
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+<span class="comment">-- เก็บแค่ hash — ถ้า database หลุด token ใช้ไม่ได้</span>
+CREATE TABLE auth.refresh_tokens (
+    token_hash VARCHAR(255) NOT NULL UNIQUE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    revoked_at TIMESTAMPTZ              <span class="comment">-- NULL = ยังใช้งานได้</span>
+);
+
+<span class="comment">-- บันทึกทุก action สำคัญ</span>
+CREATE TABLE auth.audit_logs (
+    user_id     UUID,
+    action      VARCHAR(100) NOT NULL,  <span class="comment">-- "stock.adjust"</span>
+    entity_type VARCHAR(50),            <span class="comment">-- "product"</span>
+    old_value   JSONB,
+    new_value   JSONB,
+    ip_address  INET,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);</pre>
+    </div>
+
+    <h3>golang-migrate — จัดการ Schema อย่างเป็นระบบ</h3>
+    <div class="code-block">
+      <div class="code-header"><span>Migration files naming convention</span><span class="lang">TEXT</span></div>
+      <pre>migrations/
+├── 000001_create_auth_schema.up.sql    <span class="comment"># apply</span>
+├── 000001_create_auth_schema.down.sql  <span class="comment"># rollback</span>
+├── 000002_create_product_schema.up.sql
+└── ...</pre>
+    </div>
+    <div class="code-block">
+      <div class="code-header"><span>Terminal — Mac (ผ่าน SSH tunnel)</span><span class="lang">BASH</span></div>
+      <pre><span class="comment"># Apply migrations</span>
+go run -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate \
+  -path migrations \
+  -database "postgres://user:pass@localhost:5432/wms_dev?sslmode=disable" \
+  up
+
+<span class="comment"># Rollback 1 step</span>
+... down 1</pre>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ===== SECTION 6: BACKEND ===== -->
+  <section id="backend">
+    <div class="section-header">
+      <div class="section-num">6</div>
+      <h2>Go Backend — Auth Module</h2>
+    </div>
+
+    <h3>Flow การทำงาน</h3>
+    <div class="flow-diagram">
+<span class="highlight">POST /api/v1/auth/login</span>
+  1. Validate request (email format, password min 8)
+  2. <span class="green">GetUserByEmail</span> → ไม่เจอ = ErrInvalidCredentials
+  3. <span class="green">bcrypt.CompareHashAndPassword</span> → ผิด = ErrInvalidCredentials
+  4. <span class="green">GetUserRoles + GetUserPermissions</span>
+  5. Generate <span class="yellow">JWT access token</span> (24h, signed HS256)
+  6. Generate <span class="yellow">refresh token</span> (random 32 bytes)
+  7. <span class="green">SHA256 hash</span> refresh token → เก็บใน DB
+  8. Return tokens
+    </div>
+
+    <h3>sqlc — SQL → Go Code</h3>
+    <div class="code-block">
+      <div class="code-header"><span>internal/database/queries/auth.sql</span><span class="lang">SQL</span></div>
+      <pre><span class="comment">-- name: GetUserByEmail :one</span>
+SELECT id, email, password_hash, first_name, last_name, is_active
+FROM auth.users
+WHERE email = <span class="value">$1</span> AND deleted_at IS NULL;
+
+<span class="comment">-- name: CreateRefreshToken :one</span>
+INSERT INTO auth.refresh_tokens (user_id, token_hash, expires_at)
+VALUES (<span class="value">$1</span>, <span class="value">$2</span>, <span class="value">$3</span>)
+RETURNING id, user_id, expires_at, created_at;</pre>
+    </div>
+    <div class="code-block">
+      <div class="code-header"><span>sqlc generate → Go code อัตโนมัติ</span><span class="lang">BASH</span></div>
+      <pre>sqlc generate
+
+<span class="comment"># สร้างไฟล์ใน internal/database/generated/</span>
+<span class="comment"># auth.sql.go  → func GetUserByEmail(), CreateRefreshToken()...</span>
+<span class="comment"># models.go    → struct User, RefreshToken...</span>
+<span class="comment"># querier.go   → interface สำหรับ mock testing</span></pre>
+    </div>
+
+    <h3>Standard Response Format</h3>
+    <div class="code-block">
+      <div class="code-header"><span>pkg/response/response.go</span><span class="lang">GO</span></div>
+      <pre><span class="comment">// ทุก API ตอบ format เดียวกัน</span>
+<span class="keyword">type</span> Response <span class="keyword">struct</span> {
+    Success <span class="keyword">bool</span>        `json:<span class="string">"success"</span>`
+    Data    <span class="keyword">interface</span>{} `json:<span class="string">"data,omitempty"</span>`
+    Error   <span class="keyword">string</span>      `json:<span class="string">"error,omitempty"</span>`
+}
+
+<span class="comment">// Success: {"success": true, "data": {...}}</span>
+<span class="comment">// Error:   {"success": false, "error": "invalid email or password"}</span></pre>
+    </div>
+
+    <h3>Security — ทำไม hash refresh token</h3>
+    <div class="warn-box">
+      <div class="label">ถ้าเก็บ plain token ใน database</div>
+      <p>ถ้า database หลุด — แฮกเกอร์เห็น token ทั้งหมด สามารถ impersonate ทุก user ได้ทันที<br/>
+      ถ้าเก็บ SHA256 hash — token หลุดก็ใช้ไม่ได้ เพราะต้องมี plain token ถึงจะ hash ตรงได้</p>
+    </div>
+
+    <h3>ทดสอบ API ด้วย curl</h3>
+    <div class="code-block">
+      <div class="code-header"><span>Login</span><span class="lang">BASH</span></div>
+      <pre>curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -d <span class="string">'{"email":"admin@wms.com","password":"Admin1234!"}'</span></pre>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ===== SECTION 7: CICD ===== -->
+  <section id="cicd">
+    <div class="section-header">
+      <div class="section-num">7</div>
+      <h2>CI/CD Pipeline</h2>
+    </div>
+
+    <h3>Branch Strategy</h3>
+    <div class="flow-diagram">
+<span class="highlight">feature/xxx</span>  →  PR  →  <span class="green">develop</span>  →  PR  →  <span class="yellow">main</span>  →  <span class="green">deploy server</span>
+                        ↑                        ↑
+                   CI runs here             CI + CD runs here
+    </div>
+
+    <table>
+      <tr><th>Branch</th><th>หน้าที่</th><th>Protection</th></tr>
+      <tr><td><code>main</code></td><td>production เท่านั้น</td><td>PR required, no force push</td></tr>
+      <tr><td><code>develop</code></td><td>รวม feature ก่อน merge</td><td>PR required, no force push</td></tr>
+      <tr><td><code>feature/*</code></td><td>งานแต่ละ feature</td><td>-</td></tr>
+    </table>
+
+    <h3>ทำไม Squash Merge</h3>
+    <div class="code-block">
+      <div class="code-header"><span>git log เปรียบเทียบ</span><span class="lang">TEXT</span></div>
+      <pre><span class="comment"># Merge ธรรมดา — รก</span>
+a1b2c3 fix typo
+d4e5f6 wip
+g7h8i9 test again
+j0k1l2 feat: add auth   ← ต้องการแค่นี้
+
+<span class="comment"># Squash — สะอาด</span>
+a1b2c3 feat: add auth module
+d4e5f6 feat: add product module</pre>
+    </div>
+
+    <h3>GitHub Actions — CI</h3>
+    <div class="code-block">
+      <div class="code-header"><span>.github/workflows/ci.yml</span><span class="lang">YAML</span></div>
+      <pre>name: CI
+on:
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: <span class="string">'1.25'</span> }
+
+      - name: Build
+        run: go build ./...      <span class="comment"># compile ผ่านไหม</span>
+
+      - name: Vet
+        run: go vet ./...        <span class="comment"># code quality</span>
+
+      - name: Test
+        run: go test ./...       <span class="comment"># test ผ่านไหม</span></pre>
+    </div>
+
+    <h3>GitHub Actions — CD</h3>
+    <div class="code-block">
+      <div class="code-header"><span>.github/workflows/cd.yml</span><span class="lang">YAML</span></div>
+      <pre>name: CD
+on:
+  push:
+    branches: [main]   <span class="comment"># deploy เมื่อ merge เข้า main</span>
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd ~/app/WMS && git pull origin main
+            cd ~/services/wms
+            docker compose build --no-cache
+            docker compose up -d</pre>
+    </div>
+
+    <div class="why-box">
+      <div class="label">GitHub Secrets ที่ต้องมี</div>
+      <p><code>SERVER_HOST</code> IP ของ server &nbsp;|&nbsp; <code>SERVER_USER</code> username SSH<br/>
+      <code>SERVER_SSH_KEY</code> private key เฉพาะสำหรับ CD<br/>
+      <code>DB_PASSWORD</code> <code>REDIS_PASSWORD</code> <code>JWT_SECRET</code></p>
+    </div>
+
+    <h3>Dockerfile — Multi-stage Build</h3>
+    <div class="code-block">
+      <div class="code-header"><span>backend/Dockerfile</span><span class="lang">DOCKERFILE</span></div>
+      <pre><span class="comment"># Stage 1: Build (image ใหญ่ ~800MB)</span>
+FROM golang:1.25-alpine AS builder
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/server ./cmd/api
+
+<span class="comment"># Stage 2: Run (image เล็ก ~15MB)</span>
+FROM alpine:3.21
+RUN apk --no-cache add ca-certificates tzdata
+COPY --from=builder /app/server .
+EXPOSE 8000
+CMD [<span class="string">"./server"</span>]</pre>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ===== NEXT STEPS ===== -->
+  <section id="next">
+    <div class="next-section">
+      <h3>→ ขั้นตอนต่อไป (Lesson 02)</h3>
+      <ol>
+        <li>สร้าง <strong>JWT Middleware</strong> — ทุก API ที่ต้องการสิทธิ์ต้องผ่านตรงนี้ก่อน</li>
+        <li>ตรวจสอบ <strong>role และ permission</strong> — <code>inventory:write</code>, <code>order:read</code></li>
+        <li>สร้าง <strong>Product module</strong> — CRUD สินค้า, SKU, generate barcode</li>
+        <li>สร้าง <strong>Inventory module</strong> — รับของเข้า, ปรับ stock, ดู stock level</li>
+        <li>เริ่ม <strong>Next.js frontend</strong> — Dashboard หน้าแรก</li>
+      </ol>
+    </div>
+
+    <h3 style="margin-top:32px">Checklist ที่ทำไปแล้ว</h3>
+    <ul class="checklist">
+      <li>Server structure — ~/services/ แยก service</li>
+      <li>Nginx reverse proxy + security headers</li>
+      <li>PostgreSQL 16 + Redis 7 + health check + resource limits</li>
+      <li>Backup อัตโนมัติทุกตี 2 เก็บ 7 วัน</li>
+      <li>Database schema 19 tables ใน 5 schemas</li>
+      <li>Go backend — Gin + sqlc + pgx/v5 + golang-migrate</li>
+      <li>Auth module — login, refresh token, logout</li>
+      <li>JWT + bcrypt + refresh token rotation</li>
+      <li>RBAC — 5 roles, 12 permissions</li>
+      <li>Branch strategy — main, develop, feature/*</li>
+      <li>Branch protection rules บน GitHub</li>
+      <li>CI — build, vet, test ทุกครั้งที่เปิด PR</li>
+      <li>CD — deploy อัตโนมัติเมื่อ merge เข้า main</li>
+    </ul>
+  </section>
+
+</div>
+
+<script>
+  // Active sidebar link on scroll
+  const sections = document.querySelectorAll('section[id]');
+  const links = document.querySelectorAll('.sidebar a');
+
+  window.addEventListener('scroll', () => {
+    let current = '';
+    sections.forEach(s => {
+      if (window.scrollY >= s.offsetTop - 100) current = s.id;
+    });
+    links.forEach(a => {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+    });
+  });
+</script>
+
+</body>
+</html>
