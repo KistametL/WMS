@@ -172,6 +172,7 @@ type OrderOrder struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	DiscountTotal   pgtype.Numeric     `json:"discount_total"`
+	ConfirmedAt     pgtype.Timestamptz `json:"confirmed_at"`
 }
 
 type OrderStatusHistory struct {

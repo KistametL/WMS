@@ -105,6 +105,23 @@ func (s *Service) CreateOrder(ctx context.Context, req CreateOrderRequest, userI
 			return err
 		}
 
+		// ── Re-validate SKUs inside TX (catch deactivation race) ─────────
+		// SKU อาจถูก deactivate ระหว่าง pre-check (step 1) กับ INSERT จริง
+		// ทำซ้ำภายใน TX เพื่อ guarantee ว่า SKU ยังคง active ณ เวลา insert
+		for _, item := range req.Items {
+			pgSkuID, _ := pgutil.ParseUUID(item.SKUID)
+			sku, err := q.GetSKUByID(ctx, pgSkuID)
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return fmt.Errorf("sku %q was deleted after validation", item.SKUID)
+				}
+				return err
+			}
+			if !sku.IsActive {
+				return fmt.Errorf("sku %q was deactivated after validation", sku.SkuCode)
+			}
+		}
+
 		createdOrder, err = q.CreateOrder(ctx, db.CreateOrderParams{
 			OrderNumber:     orderNum,
 			Channel:         req.Channel,
