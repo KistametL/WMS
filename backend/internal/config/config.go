@@ -101,7 +101,7 @@ func getEnvInt(key string, defaultValue int) int {
 	}
 	v, err := strconv.Atoi(s)
 	if err != nil || v <= 0 {
-		log.Fatalf("environment variable %s must be a positive integer, got %q", key, s)
+		log.Fatalf("environment variable %s must be a positive integer, got %q", key, s) //nolint:gosec // G706: key is a hardcoded constant; s is operator-supplied env var, not untrusted user input
 	}
 	return v
 }
