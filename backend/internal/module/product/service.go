@@ -3,6 +3,7 @@ package product
 import (
 	"context"
 	"errors"
+	"log"
 	"strconv"
 
 	"github.com/jackc/pgx/v5"
@@ -70,7 +71,13 @@ func numericToFloat(n pgtype.Numeric) float64 {
 	if !n.Valid {
 		return 0
 	}
-	f, _ := n.Float64Value()
+	// Float64Value returns an error for NaN/Infinity values stored in pgtype.Numeric.
+	// These should never appear in price/weight columns but we log rather than panic.
+	f, err := n.Float64Value()
+	if err != nil {
+		log.Printf("numericToFloat: unexpected conversion error: %v", err)
+		return 0
+	}
 	return f.Float64
 }
 
@@ -78,7 +85,11 @@ func nullNumericToFloat(n pgtype.Numeric) *float64 {
 	if !n.Valid {
 		return nil
 	}
-	f, _ := n.Float64Value()
+	f, err := n.Float64Value()
+	if err != nil {
+		log.Printf("nullNumericToFloat: unexpected conversion error: %v", err)
+		return nil
+	}
 	v := f.Float64
 	return &v
 }

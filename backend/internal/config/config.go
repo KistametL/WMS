@@ -22,6 +22,7 @@ type DatabaseConfig struct {
 	User     string
 	Password string
 	Name     string
+	SSLMode  string // DB_SSLMODE: "disable" for dev, "require" or "verify-full" for production
 }
 
 type RedisConfig struct {
@@ -50,6 +51,7 @@ func Load() *Config {
 			User:     getEnv("DB_USER", ""),
 			Password: getEnv("DB_PASSWORD", ""),
 			Name:     getEnv("DB_NAME", ""),
+			SSLMode:  getEnv("DB_SSLMODE", "disable"),
 		},
 		Redis: RedisConfig{
 			Host:     getEnv("REDIS_HOST", "localhost"),

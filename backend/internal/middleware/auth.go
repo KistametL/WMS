@@ -47,7 +47,7 @@ func RequireAuth(cfg *config.Config) gin.HandlerFunc {
 		tokenStr := parts[1]
 
 		// Parse และ validate token (signature + expiry)
-		token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+		token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
 			// ป้องกัน algorithm confusion attack — ตรวจสอบว่าเป็น HS256 เท่านั้น
 			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, jwt.ErrSignatureInvalid
@@ -192,8 +192,8 @@ func getStringSlice(c *gin.Context, key string) []string {
 		return ss
 	}
 
-	// jwt.MapClaims decode array เป็น []interface{}
-	if raw, ok := val.([]interface{}); ok {
+	// jwt.MapClaims decode array เป็น []any
+	if raw, ok := val.([]any); ok {
 		result := make([]string, 0, len(raw))
 		for _, item := range raw {
 			if s, ok := item.(string); ok {

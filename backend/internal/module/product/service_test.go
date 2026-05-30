@@ -4,15 +4,33 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// newTestService creates a Service backed by a real database connection.
+//
+// The DSN is read from the TEST_DATABASE_URL environment variable so that
+// credentials are never stored in source code (CWE-798).
+//
+// Set the variable before running:
+//
+//	TEST_DATABASE_URL="host=localhost port=5432 user=wms_user password=... dbname=wms_dev sslmode=disable" \
+//	  go test ./internal/module/product/...
+//
+// In CI, set TEST_DATABASE_URL as a secret environment variable.
+// If the variable is absent the test is skipped rather than failing.
 func newTestService(t *testing.T) *Service {
 	t.Helper()
-	dsn := "host=localhost port=5432 user=wms_user password=ROTATED_REMOVED_FROM_HISTORY dbname=wms_dev sslmode=disable"
+
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("TEST_DATABASE_URL not set — skipping integration test")
+	}
+
 	pool, err := pgxpool.New(context.Background(), dsn)
 	if err != nil {
 		t.Fatalf("connect: %v", err)
