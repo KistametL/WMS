@@ -8,7 +8,9 @@ type LoginRequest struct {
 }
 
 type LoginResponse struct {
+	TokenType    string   `json:"token_type"`
 	AccessToken  string   `json:"access_token"`
+	ExpiresIn    int      `json:"expires_in"` // วินาที เช่น 86400 = 24 ชั่วโมง
 	RefreshToken string   `json:"refresh_token"`
 	UserID       string   `json:"user_id"`
 	Email        string   `json:"email"`
@@ -22,7 +24,9 @@ type RefreshRequest struct {
 }
 
 type RefreshResponse struct {
+	TokenType    string `json:"token_type"`
 	AccessToken  string `json:"access_token"`
+	ExpiresIn    int    `json:"expires_in"`
 	RefreshToken string `json:"refresh_token"`
 }
 
