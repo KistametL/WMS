@@ -11,6 +11,7 @@ import (
 	"github.com/KistametL/WMS/backend/internal/database"
 	"github.com/KistametL/WMS/backend/internal/middleware"
 	"github.com/KistametL/WMS/backend/internal/module/auth"
+	"github.com/KistametL/WMS/backend/internal/module/inventory"
 	"github.com/KistametL/WMS/backend/internal/module/product"
 	"github.com/KistametL/WMS/backend/pkg/response"
 )
@@ -65,6 +66,11 @@ func main() {
 		productService := product.NewService(pool)
 		productHandler := product.NewHandler(productService)
 		productHandler.RegisterRoutes(protected)
+
+		// Inventory module — stock levels, movements
+		inventoryService := inventory.NewService(pool)
+		inventoryHandler := inventory.NewHandler(inventoryService)
+		inventoryHandler.RegisterRoutes(protected)
 	}
 
 	addr := fmt.Sprintf(":%s", cfg.AppPort)

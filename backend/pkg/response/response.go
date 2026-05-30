@@ -46,6 +46,13 @@ func Conflict(c *gin.Context, msg string) {
 	c.JSON(http.StatusConflict, Response{Success: false, Error: msg})
 }
 
+// UnprocessableEntity writes a 422 Unprocessable Content response.
+// Use when the request is syntactically valid but semantically incorrect —
+// e.g. insufficient stock, or a business rule violation (RFC 9110 §15.5.23).
+func UnprocessableEntity(c *gin.Context, msg string) {
+	c.JSON(http.StatusUnprocessableEntity, Response{Success: false, Error: msg})
+}
+
 func InternalError(c *gin.Context) {
 	c.JSON(http.StatusInternalServerError, Response{Success: false, Error: "internal server error"})
 }
