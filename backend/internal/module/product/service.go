@@ -95,6 +95,27 @@ func nullTextToString(t pgtype.Text) *string {
 	return &t.String
 }
 
+// toNullUUID converts a user ID string to pgtype.UUID for updated_by.
+// Returns an invalid (null) UUID if the string is empty or unparseable.
+func toNullUUID(s string) pgtype.UUID {
+	if s == "" {
+		return pgtype.UUID{}
+	}
+	var u pgtype.UUID
+	if err := u.Scan(s); err != nil {
+		return pgtype.UUID{}
+	}
+	return u
+}
+
+func nullUUIDToString(u pgtype.UUID) *string {
+	if !u.Valid {
+		return nil
+	}
+	s := u.String()
+	return &s
+}
+
 // ── Categories ────────────────────────────────────────────────────
 
 func (s *Service) ListCategories(ctx context.Context) ([]CategoryResponse, error) {
@@ -111,6 +132,7 @@ func (s *Service) ListCategories(ctx context.Context) ([]CategoryResponse, error
 			Description: nullTextToString(r.Description),
 			ParentID:    nullInt4ToInt32(r.ParentID),
 			IsActive:    r.IsActive,
+			UpdatedBy:   nullUUIDToString(r.UpdatedBy),
 			CreatedAt:   r.CreatedAt.Time,
 			UpdatedAt:   r.UpdatedAt.Time,
 		}
@@ -133,6 +155,7 @@ func (s *Service) GetCategory(ctx context.Context, id int32) (*CategoryResponse,
 		Description: nullTextToString(row.Description),
 		ParentID:    nullInt4ToInt32(row.ParentID),
 		IsActive:    row.IsActive,
+		UpdatedBy:   nullUUIDToString(row.UpdatedBy),
 		CreatedAt:   row.CreatedAt.Time,
 		UpdatedAt:   row.UpdatedAt.Time,
 	}, nil
@@ -154,18 +177,20 @@ func (s *Service) CreateCategory(ctx context.Context, req CreateCategoryRequest)
 		Description: nullTextToString(row.Description),
 		ParentID:    nullInt4ToInt32(row.ParentID),
 		IsActive:    row.IsActive,
+		UpdatedBy:   nullUUIDToString(row.UpdatedBy),
 		CreatedAt:   row.CreatedAt.Time,
 		UpdatedAt:   row.UpdatedAt.Time,
 	}, nil
 }
 
-func (s *Service) UpdateCategory(ctx context.Context, id int32, req UpdateCategoryRequest) (*CategoryResponse, error) {
+func (s *Service) UpdateCategory(ctx context.Context, id int32, req UpdateCategoryRequest, updatedByUserID string) (*CategoryResponse, error) {
 	row, err := s.queries.UpdateCategory(ctx, db.UpdateCategoryParams{
 		ID:          id,
 		Name:        toText(req.Name),
 		Description: toText(req.Description),
 		ParentID:    toInt4(req.ParentID),
 		IsActive:    toBool(req.IsActive),
+		UpdatedBy:   toNullUUID(updatedByUserID),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -180,6 +205,7 @@ func (s *Service) UpdateCategory(ctx context.Context, id int32, req UpdateCatego
 		Description: nullTextToString(row.Description),
 		ParentID:    nullInt4ToInt32(row.ParentID),
 		IsActive:    row.IsActive,
+		UpdatedBy:   nullUUIDToString(row.UpdatedBy),
 		CreatedAt:   row.CreatedAt.Time,
 		UpdatedAt:   row.UpdatedAt.Time,
 	}, nil
@@ -232,6 +258,7 @@ func (s *Service) ListProducts(ctx context.Context, q ListProductsQuery) (*ListR
 			Name:        r.Name,
 			Description: nullTextToString(r.Description),
 			IsActive:    r.IsActive,
+			UpdatedBy:   nullUUIDToString(r.UpdatedBy),
 			CreatedAt:   r.CreatedAt.Time,
 			UpdatedAt:   r.UpdatedAt.Time,
 		}
@@ -271,6 +298,7 @@ func (s *Service) GetProduct(ctx context.Context, id string) (*ProductDetailResp
 			Name:        row.Name,
 			Description: nullTextToString(row.Description),
 			IsActive:    row.IsActive,
+			UpdatedBy:   nullUUIDToString(row.UpdatedBy),
 			CreatedAt:   row.CreatedAt.Time,
 			UpdatedAt:   row.UpdatedAt.Time,
 		},
@@ -294,12 +322,13 @@ func (s *Service) CreateProduct(ctx context.Context, req CreateProductRequest) (
 		Name:        row.Name,
 		Description: nullTextToString(row.Description),
 		IsActive:    row.IsActive,
+		UpdatedBy:   nullUUIDToString(row.UpdatedBy),
 		CreatedAt:   row.CreatedAt.Time,
 		UpdatedAt:   row.UpdatedAt.Time,
 	}, nil
 }
 
-func (s *Service) UpdateProduct(ctx context.Context, id string, req UpdateProductRequest) (*ProductResponse, error) {
+func (s *Service) UpdateProduct(ctx context.Context, id string, req UpdateProductRequest, updatedByUserID string) (*ProductResponse, error) {
 	pgID, err := parseUUID(id)
 	if err != nil {
 		return nil, ErrNotFound
@@ -311,6 +340,7 @@ func (s *Service) UpdateProduct(ctx context.Context, id string, req UpdateProduc
 		Name:        toText(req.Name),
 		Description: toText(req.Description),
 		IsActive:    toBool(req.IsActive),
+		UpdatedBy:   toNullUUID(updatedByUserID),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -325,6 +355,7 @@ func (s *Service) UpdateProduct(ctx context.Context, id string, req UpdateProduc
 		Name:        row.Name,
 		Description: nullTextToString(row.Description),
 		IsActive:    row.IsActive,
+		UpdatedBy:   nullUUIDToString(row.UpdatedBy),
 		CreatedAt:   row.CreatedAt.Time,
 		UpdatedAt:   row.UpdatedAt.Time,
 	}, nil
@@ -385,7 +416,7 @@ func (s *Service) CreateSKU(ctx context.Context, productID string, req CreateSKU
 	return &res, nil
 }
 
-func (s *Service) UpdateSKU(ctx context.Context, id string, req UpdateSKURequest) (*SKUResponse, error) {
+func (s *Service) UpdateSKU(ctx context.Context, id string, req UpdateSKURequest, updatedByUserID string) (*SKUResponse, error) {
 	pgID, err := parseUUID(id)
 	if err != nil {
 		return nil, ErrNotFound
@@ -406,6 +437,7 @@ func (s *Service) UpdateSKU(ctx context.Context, id string, req UpdateSKURequest
 		WeightGrams:    toInt4(req.WeightGrams),
 		Attributes:     attrs,
 		IsActive:       toBool(req.IsActive),
+		UpdatedBy:      toNullUUID(updatedByUserID),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -436,19 +468,19 @@ func toSKUResponse(r interface{}) SKUResponse {
 	case db.CreateSKURow:
 		return skuRowToResponse(v.ID, v.ProductID, v.SkuCode, v.Name,
 			v.CostPrice, v.SellingPrice, v.CompareAtPrice,
-			v.WeightGrams, v.Attributes, v.IsActive, v.CreatedAt, v.UpdatedAt)
+			v.WeightGrams, v.Attributes, v.IsActive, v.UpdatedBy, v.CreatedAt, v.UpdatedAt)
 	case db.UpdateSKURow:
 		return skuRowToResponse(v.ID, v.ProductID, v.SkuCode, v.Name,
 			v.CostPrice, v.SellingPrice, v.CompareAtPrice,
-			v.WeightGrams, v.Attributes, v.IsActive, v.CreatedAt, v.UpdatedAt)
+			v.WeightGrams, v.Attributes, v.IsActive, v.UpdatedBy, v.CreatedAt, v.UpdatedAt)
 	case db.ListSKUsByProductRow:
 		return skuRowToResponse(v.ID, v.ProductID, v.SkuCode, v.Name,
 			v.CostPrice, v.SellingPrice, v.CompareAtPrice,
-			v.WeightGrams, v.Attributes, v.IsActive, v.CreatedAt, v.UpdatedAt)
+			v.WeightGrams, v.Attributes, v.IsActive, v.UpdatedBy, v.CreatedAt, v.UpdatedAt)
 	case db.GetSKUByIDRow:
 		return skuRowToResponse(v.ID, v.ProductID, v.SkuCode, v.Name,
 			v.CostPrice, v.SellingPrice, v.CompareAtPrice,
-			v.WeightGrams, v.Attributes, v.IsActive, v.CreatedAt, v.UpdatedAt)
+			v.WeightGrams, v.Attributes, v.IsActive, v.UpdatedBy, v.CreatedAt, v.UpdatedAt)
 	}
 	return SKUResponse{}
 }
@@ -460,6 +492,7 @@ func skuRowToResponse(
 	weightGrams pgtype.Int4,
 	attributes []byte,
 	isActive bool,
+	updatedBy pgtype.UUID,
 	createdAt, updatedAt pgtype.Timestamptz,
 ) SKUResponse {
 	return SKUResponse{
@@ -473,6 +506,7 @@ func skuRowToResponse(
 		WeightGrams:    nullInt4ToInt32(weightGrams),
 		Attributes:     attributes,
 		IsActive:       isActive,
+		UpdatedBy:      nullUUIDToString(updatedBy),
 		CreatedAt:      createdAt.Time,
 		UpdatedAt:      updatedAt.Time,
 	}

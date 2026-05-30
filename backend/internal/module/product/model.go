@@ -13,6 +13,7 @@ type CategoryResponse struct {
 	Description *string   `json:"description,omitempty"`
 	ParentID    *int32    `json:"parent_id,omitempty"`
 	IsActive    bool      `json:"is_active"`
+	UpdatedBy   *string   `json:"updated_by,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -38,6 +39,7 @@ type ProductResponse struct {
 	Name        string    `json:"name"`
 	Description *string   `json:"description,omitempty"`
 	IsActive    bool      `json:"is_active"`
+	UpdatedBy   *string   `json:"updated_by,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -92,6 +94,7 @@ type SKUResponse struct {
 	WeightGrams    *int32          `json:"weight_grams,omitempty"`
 	Attributes     json.RawMessage `json:"attributes,omitempty"`
 	IsActive       bool            `json:"is_active"`
+	UpdatedBy      *string         `json:"updated_by,omitempty"`
 	CreatedAt      time.Time       `json:"created_at"`
 	UpdatedAt      time.Time       `json:"updated_at"`
 }
