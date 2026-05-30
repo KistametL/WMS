@@ -25,12 +25,8 @@ jobs:
             git reset --hard origin/main
 
             echo ">>> Building and restarting backend..."
-            cd ~/services/wms
-            docker compose build --no-cache
-            docker compose up -d
-
-            echo ">>> Running migrations..."
-            docker compose exec -T backend ./server migrate up || true
+            docker compose -f ~/app/WMS/docker-compose.prod.yml build --no-cache backend
+            docker compose -f ~/app/WMS/docker-compose.prod.yml up -d backend
 
             echo ">>> Checking health..."
             sleep 5

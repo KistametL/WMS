@@ -1,0 +1,12 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: wms-backend
+    # network_mode: host — backend รันบน host network โดยตรง
+    # ทำให้เชื่อมต่อ postgres/redis ที่ localhost:5432/6379 ได้เลย
+    # เหมาะกับ home server ที่ postgres ผูกกับ 127.0.0.1
+    network_mode: host
+    env_file: /home/kistamet/services/wms/.env
+    restart: unless-stopped
