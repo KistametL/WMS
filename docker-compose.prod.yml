@@ -1,0 +1,14 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: wms-backend
+    env_file: /home/kistamet/services/wms/.env
+    networks:
+      - proxy
+    restart: unless-stopped
+
+networks:
+  proxy:
+    external: true   # network นี้สร้างไว้แล้วบน server, shared กับ postgres/redis

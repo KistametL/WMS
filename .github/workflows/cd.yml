@@ -7,33 +7,23 @@ on:
 jobs:
   deploy:
     name: Deploy to Server
-    runs-on: ubuntu-latest
+    # self-hosted runner รันตรงบน home-server — ไม่ต้อง SSH, ไม่ต้องเปิด port
+    runs-on: self-hosted
 
     steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
-            set -e
+      - name: Pull latest code
+        run: |
+          cd ~/app/WMS
+          git fetch origin main
+          git reset --hard origin/main
 
-            echo ">>> Pulling latest code..."
-            cd ~/app/WMS
-            git fetch origin main
-            git reset --hard origin/main
+      - name: Build and restart backend
+        run: |
+          docker compose -f ~/app/WMS/docker-compose.prod.yml build --no-cache backend
+          docker compose -f ~/app/WMS/docker-compose.prod.yml up -d backend
 
-            echo ">>> Building and restarting backend..."
-            cd ~/services/wms
-            docker compose build --no-cache
-            docker compose up -d
-
-            echo ">>> Running migrations..."
-            docker compose exec -T backend ./server migrate up || true
-
-            echo ">>> Checking health..."
-            sleep 5
-            curl -f http://localhost:8000/health
-
-            echo ">>> Deploy complete!"
+      - name: Health check
+        run: |
+          sleep 5
+          curl -f http://localhost:8000/health
+          echo "Deploy complete!"
