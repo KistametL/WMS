@@ -2,12 +2,14 @@ package order
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
 	"strconv"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -18,10 +20,13 @@ import (
 // ── Sentinel Errors ───────────────────────────────────────────────
 
 var (
-	ErrNotFound          = errors.New("not found")
-	ErrInvalidTransition = errors.New("invalid status transition")
-	ErrOrderNotEditable  = errors.New("order can only be edited in pending or confirmed status")
-	ErrInsufficientStock = errors.New("insufficient stock")
+	ErrNotFound              = errors.New("not found")
+	ErrInvalidTransition     = errors.New("invalid status transition")
+	ErrOrderNotEditable      = errors.New("order can only be edited in pending or confirmed status")
+	ErrInsufficientStock     = errors.New("insufficient stock")
+	ErrSKUNotFound           = errors.New("sku not found")
+	ErrSKUInactive           = errors.New("sku is inactive")
+	ErrDuplicateChannelOrder = errors.New("order with this channel_order_id already exists")
 )
 
 // ── Service ───────────────────────────────────────────────────────
@@ -65,14 +70,21 @@ func (s *Service) CreateOrder(ctx context.Context, req CreateOrderRequest, userI
 		sku, err := s.queries.GetSKUByID(ctx, pgID)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, fmt.Errorf("sku %q not found", item.SKUID)
+				return nil, fmt.Errorf("%w: %s", ErrSKUNotFound, item.SKUID)
 			}
 			return nil, err
 		}
 		if !sku.IsActive {
-			return nil, fmt.Errorf("sku %q is inactive", sku.SkuCode)
+			return nil, fmt.Errorf("%w: %s", ErrSKUInactive, sku.SkuCode)
 		}
 		skuMap[item.SKUID] = skuInfo{Code: sku.SkuCode, Name: sku.Name}
+	}
+
+	// ── 1b. Validate shipping_address format ─────────────────────────
+	// json.RawMessage รับทุก value ที่เป็น valid JSON แต่ shipping_address
+	// ต้องเป็น JSON object เท่านั้น (ไม่ใช่ string, number, array)
+	if err := validateShippingAddress(req.ShippingAddress); err != nil {
+		return nil, err
 	}
 
 	// ── 2. Calculate totals ──────────────────────────────────────────
@@ -140,6 +152,12 @@ func (s *Service) CreateOrder(ctx context.Context, req CreateOrderRequest, userI
 			CreatedBy:       userPgID,
 		})
 		if err != nil {
+			// idx_orders_channel_order_unique: (channel, channel_order_id) ซ้ำ
+			// → webhook ส่งซ้ำ หรือ duplicate request
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+				return ErrDuplicateChannelOrder
+			}
 			return fmt.Errorf("create order: %w", err)
 		}
 
@@ -187,25 +205,44 @@ func (s *Service) GetOrder(ctx context.Context, id string) (*OrderDetailResponse
 		return nil, ErrNotFound
 	}
 
-	order, err := s.queries.GetOrderByID(ctx, pgID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+	// ── RepeatableRead + ReadOnly TX (N2 fix) ────────────────────────
+	// อ่าน 3 queries ใน snapshot เดียวกัน ป้องกัน inconsistency
+	// เช่น status history ที่เพิ่งถูก insert ระหว่าง query 1 กับ query 3
+	var result *OrderDetailResponse
+	txErr := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{
+		IsoLevel:   pgx.RepeatableRead,
+		AccessMode: pgx.ReadOnly,
+	}, func(tx pgx.Tx) error {
+		q := s.queries.WithTx(tx)
+
+		order, err := q.GetOrderByID(ctx, pgID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrNotFound
+			}
+			return err
+		}
+
+		items, err := q.ListOrderItems(ctx, pgID)
+		if err != nil {
+			return err
+		}
+
+		history, err := q.ListStatusHistory(ctx, pgID)
+		if err != nil {
+			return err
+		}
+
+		result = orderDetailToResponse(order, items, history)
+		return nil
+	})
+	if txErr != nil {
+		if errors.Is(txErr, ErrNotFound) {
 			return nil, ErrNotFound
 		}
-		return nil, err
+		return nil, txErr
 	}
-
-	items, err := s.queries.ListOrderItems(ctx, pgID)
-	if err != nil {
-		return nil, err
-	}
-
-	history, err := s.queries.ListStatusHistory(ctx, pgID)
-	if err != nil {
-		return nil, err
-	}
-
-	return orderDetailToResponse(order, items, history), nil
+	return result, nil
 }
 
 // ── List ──────────────────────────────────────────────────────────
@@ -248,11 +285,17 @@ func (s *Service) ListOrders(ctx context.Context, q ListOrdersQuery) (*ListRespo
 		items[i] = listRowToResponse(r)
 	}
 
+	totalPages := 0
+	if limit > 0 {
+		totalPages = (int(total) + limit - 1) / limit // ceiling division
+	}
+
 	return &ListResponse[OrderResponse]{
-		Items: items,
-		Total: total,
-		Page:  page,
-		Limit: limit,
+		Items:      items,
+		Total:      total,
+		Page:       page,
+		Limit:      limit,
+		TotalPages: totalPages,
 	}, nil
 }
 
@@ -260,46 +303,64 @@ func (s *Service) ListOrders(ctx context.Context, q ListOrdersQuery) (*ListRespo
 
 // UpdateOrder แก้ไข customer/shipping/note ได้เฉพาะ pending หรือ confirmed
 // total ถูก recalculate อัตโนมัติใน SQL เมื่อ shipping_cost หรือ discount_total เปลี่ยน
+//
+// M1 fix: ใช้ TX + GetOrderByIDForUpdate ป้องกัน race condition ระหว่าง
+// status check กับ UPDATE (concurrent status change จะถูก detect ก่อน update)
 func (s *Service) UpdateOrder(ctx context.Context, id string, req UpdateOrderRequest) (*OrderResponse, error) {
 	pgID, err := pgutil.ParseUUID(id)
 	if err != nil {
 		return nil, ErrNotFound
 	}
 
-	existing, err := s.queries.GetOrderByID(ctx, pgID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+	// N3: validate shipping_address ก่อน TX เพื่อ fast-fail
+	if err := validateShippingAddress(req.ShippingAddress); err != nil {
+		return nil, err
+	}
+
+	var result *OrderResponse
+	txErr := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
+		q := s.queries.WithTx(tx)
+
+		// Lock orders row ก่อน read status (ป้องกัน TOCTOU)
+		locked, err := q.GetOrderByIDForUpdate(ctx, pgID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrNotFound
+			}
+			return err
 		}
-		return nil, err
-	}
-	if existing.Status != StatusPending && existing.Status != StatusConfirmed {
-		return nil, ErrOrderNotEditable
-	}
+		if locked.Status != StatusPending && locked.Status != StatusConfirmed {
+			return ErrOrderNotEditable
+		}
 
-	params := db.UpdateOrderParams{
-		ID:             pgID,
-		CustomerName:   toText(req.CustomerName),
-		CustomerPhone:  toText(req.CustomerPhone),
-		ShippingMethod: toText(req.ShippingMethod),
-		Note:           toText(req.Note),
-	}
-	if len(req.ShippingAddress) > 0 {
-		params.ShippingAddress = req.ShippingAddress
-	}
-	if req.ShippingCost != nil {
-		params.ShippingCost = toNumeric(*req.ShippingCost)
-	}
-	if req.DiscountTotal != nil {
-		params.DiscountTotal = toNumeric(*req.DiscountTotal)
-	}
+		params := db.UpdateOrderParams{
+			ID:             pgID,
+			CustomerName:   toText(req.CustomerName),
+			CustomerPhone:  toText(req.CustomerPhone),
+			ShippingMethod: toText(req.ShippingMethod),
+			Note:           toText(req.Note),
+		}
+		if len(req.ShippingAddress) > 0 {
+			params.ShippingAddress = req.ShippingAddress
+		}
+		if req.ShippingCost != nil {
+			params.ShippingCost = toNumeric(*req.ShippingCost)
+		}
+		if req.DiscountTotal != nil {
+			params.DiscountTotal = toNumeric(*req.DiscountTotal)
+		}
 
-	updated, err := s.queries.UpdateOrder(ctx, params)
-	if err != nil {
-		return nil, err
+		updated, err := q.UpdateOrder(ctx, params)
+		if err != nil {
+			return err
+		}
+		result = updateRowToResponse(updated)
+		return nil
+	})
+	if txErr != nil {
+		return nil, txErr
 	}
-
-	return updateRowToResponse(updated), nil
+	return result, nil
 }
 
 // ── Status Transitions ────────────────────────────────────────────
@@ -654,9 +715,23 @@ func (s *Service) cancelWithLock(ctx context.Context, pgID pgtype.UUID, fromStat
 
 // applyStatusUpdate handles simple transitions with no stock side effects.
 // (picking, packing, ready_to_ship, delivered, completed)
+//
+// C1 fix: เพิ่ม GetOrderByIDForUpdate เพื่อ lock orders row ก่อน UPDATE
+// ป้องกัน race condition ที่ concurrent cancel อาจ cancel order ไปแล้ว
+// แต่ TX นี้ยัง set status = picking บน cancelled order
 func (s *Service) applyStatusUpdate(ctx context.Context, pgID pgtype.UUID, fromStatus, toStatus string, note *string, cancelReason pgtype.Text, userPgID pgtype.UUID) (*OrderDetailResponse, error) {
 	txErr := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
+
+		// ── Lock + re-validate (C1 fix) ───────────────────────────────
+		locked, err := q.GetOrderByIDForUpdate(ctx, pgID)
+		if err != nil {
+			return fmt.Errorf("lock order row: %w", err)
+		}
+		if locked.Status != fromStatus {
+			return fmt.Errorf("%w: order status changed to %s (concurrent request?)",
+				ErrInvalidTransition, locked.Status)
+		}
 
 		if _, err := q.UpdateOrderStatus(ctx, db.UpdateOrderStatusParams{
 			ID:           pgID,
@@ -939,6 +1014,21 @@ func historyToResponse(h db.OrderStatusHistory) StatusHistoryResponse {
 
 // ── Helpers ───────────────────────────────────────────────────────
 
+// validateShippingAddress ตรวจว่า shipping_address เป็น JSON object ถ้า provided
+// json.RawMessage รับทุก valid JSON value (string, number, array ฯลฯ)
+// แต่ JSONB address ต้องเป็น object เท่านั้น
+func validateShippingAddress(addr json.RawMessage) error {
+	if len(addr) == 0 || string(addr) == "null" {
+		return nil // optional field — ไม่ต้องส่งก็ได้
+	}
+	// ตรวจว่าเป็น JSON object (ขึ้นต้นด้วย '{')
+	var obj map[string]any
+	if err := json.Unmarshal(addr, &obj); err != nil {
+		return fmt.Errorf("shipping_address must be a JSON object: %w", err)
+	}
+	return nil
+}
+
 func toText(s *string) pgtype.Text {
 	if s == nil {
 		return pgtype.Text{}
@@ -964,8 +1054,11 @@ func toNumeric(f float64) pgtype.Numeric {
 // numericToFloat converts pgtype.Numeric → float64.
 // Formula: value = Int * 10^Exp
 // Uses big.Rat for negative exponents (typical for prices: NUMERIC(15,2) → Exp=-2).
+//
+// N5 fix: ตรวจ InfinityModifier ก่อน — ค่า Infinity ไม่ควรเกิดกับ price column
+// แต่ถ้าเกิดขึ้น (data corruption / migration) ให้ return 0 แทน panic/wrong result
 func numericToFloat(n pgtype.Numeric) float64 {
-	if !n.Valid || n.NaN || n.Int == nil {
+	if !n.Valid || n.NaN || n.InfinityModifier != pgtype.Finite || n.Int == nil {
 		return 0
 	}
 	if n.Exp >= 0 {
