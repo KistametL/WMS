@@ -73,11 +73,17 @@ func (h *Handler) CreateOrder(c *gin.Context) {
 	result, err := h.service.CreateOrder(c.Request.Context(), req, userID)
 	if err != nil {
 		switch {
-		case errors.Is(err, ErrInsufficientStock):
+		case errors.Is(err, ErrSKUNotFound),
+			errors.Is(err, ErrSKUInactive),
+			errors.Is(err, ErrInsufficientStock):
+			// 422: business rule violation (SKU ไม่มี / inactive / stock ไม่พอ)
 			response.UnprocessableEntity(c, err.Error())
+		case errors.Is(err, ErrDuplicateChannelOrder):
+			// 409: channel webhook ส่งซ้ำ หรือ duplicate request
+			response.Conflict(c, err.Error())
 		default:
-			// SKU not found or inactive errors are user errors, but message is safe
-			response.BadRequest(c, err.Error())
+			// 500: DB error หรือ unexpected — ไม่ส่ง raw error ออก (security)
+			response.InternalError(c)
 		}
 		return
 	}
