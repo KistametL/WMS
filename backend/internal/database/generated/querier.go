@@ -39,6 +39,10 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	GetCategoryByID(ctx context.Context, id int32) (GetCategoryByIDRow, error)
 	GetOrderByID(ctx context.Context, id pgtype.UUID) (GetOrderByIDRow, error)
+	// ล็อก orders row ด้วย SELECT FOR UPDATE
+	// ใช้ภายใน transaction ที่ต้องการ serialize การเปลี่ยน status
+	// (เช่น confirm, cancel) เพื่อป้องกัน TOCTOU race condition
+	GetOrderByIDForUpdate(ctx context.Context, id pgtype.UUID) (GetOrderByIDForUpdateRow, error)
 	GetProductByID(ctx context.Context, id pgtype.UUID) (GetProductByIDRow, error)
 	GetRefreshToken(ctx context.Context, tokenHash string) (GetRefreshTokenRow, error)
 	GetSKUByID(ctx context.Context, id pgtype.UUID) (GetSKUByIDRow, error)
@@ -85,6 +89,7 @@ type Querier interface {
 	UpdateLowStockThreshold(ctx context.Context, arg UpdateLowStockThresholdParams) (InventoryStockLevel, error)
 	// ใช้สำหรับแก้ข้อมูล order (customer info, shipping, note)
 	// อนุญาตเฉพาะ status pending หรือ confirmed เท่านั้น (validate ใน service)
+	// total ถูก recalculate ทุกครั้งที่ shipping_cost หรือ discount_total เปลี่ยน
 	UpdateOrder(ctx context.Context, arg UpdateOrderParams) (UpdateOrderRow, error)
 	// อัพเดต status + timestamp ที่เกี่ยวข้องอัตโนมัติ
 	UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) (UpdateOrderStatusRow, error)

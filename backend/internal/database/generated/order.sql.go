@@ -250,7 +250,7 @@ SELECT id, order_number, channel, channel_order_id, status,
        shipping_method, shipping_cost,
        is_cod, cod_amount, cod_collected_at,
        subtotal, discount_total, total,
-       note, packed_at, shipped_at, delivered_at,
+       note, confirmed_at, packed_at, shipped_at, delivered_at,
        cancelled_at, cancel_reason,
        created_by, created_at, updated_at
 FROM "order".orders
@@ -275,6 +275,7 @@ type GetOrderByIDRow struct {
 	DiscountTotal   pgtype.Numeric     `json:"discount_total"`
 	Total           pgtype.Numeric     `json:"total"`
 	Note            pgtype.Text        `json:"note"`
+	ConfirmedAt     pgtype.Timestamptz `json:"confirmed_at"`
 	PackedAt        pgtype.Timestamptz `json:"packed_at"`
 	ShippedAt       pgtype.Timestamptz `json:"shipped_at"`
 	DeliveredAt     pgtype.Timestamptz `json:"delivered_at"`
@@ -306,6 +307,7 @@ func (q *Queries) GetOrderByID(ctx context.Context, id pgtype.UUID) (GetOrderByI
 		&i.DiscountTotal,
 		&i.Total,
 		&i.Note,
+		&i.ConfirmedAt,
 		&i.PackedAt,
 		&i.ShippedAt,
 		&i.DeliveredAt,
@@ -315,6 +317,25 @@ func (q *Queries) GetOrderByID(ctx context.Context, id pgtype.UUID) (GetOrderByI
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
+	return i, err
+}
+
+const getOrderByIDForUpdate = `-- name: GetOrderByIDForUpdate :one
+SELECT id, status FROM "order".orders WHERE id = $1 FOR UPDATE
+`
+
+type GetOrderByIDForUpdateRow struct {
+	ID     pgtype.UUID `json:"id"`
+	Status string      `json:"status"`
+}
+
+// ล็อก orders row ด้วย SELECT FOR UPDATE
+// ใช้ภายใน transaction ที่ต้องการ serialize การเปลี่ยน status
+// (เช่น confirm, cancel) เพื่อป้องกัน TOCTOU race condition
+func (q *Queries) GetOrderByIDForUpdate(ctx context.Context, id pgtype.UUID) (GetOrderByIDForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getOrderByIDForUpdate, id)
+	var i GetOrderByIDForUpdateRow
+	err := row.Scan(&i.ID, &i.Status)
 	return i, err
 }
 
@@ -505,6 +526,9 @@ SET customer_name    = COALESCE($2,    customer_name),
     shipping_method  = COALESCE($5,  shipping_method),
     shipping_cost    = COALESCE($6,    shipping_cost),
     discount_total   = COALESCE($7,   discount_total),
+    total            = subtotal
+                     + COALESCE($6,    shipping_cost)
+                     - COALESCE($7,   discount_total),
     note             = COALESCE($8,             note)
 WHERE id = $1
 RETURNING id, order_number, channel, status,
@@ -548,6 +572,7 @@ type UpdateOrderRow struct {
 
 // ใช้สำหรับแก้ข้อมูล order (customer info, shipping, note)
 // อนุญาตเฉพาะ status pending หรือ confirmed เท่านั้น (validate ใน service)
+// total ถูก recalculate ทุกครั้งที่ shipping_cost หรือ discount_total เปลี่ยน
 func (q *Queries) UpdateOrder(ctx context.Context, arg UpdateOrderParams) (UpdateOrderRow, error) {
 	row := q.db.QueryRow(ctx, updateOrder,
 		arg.ID,
@@ -584,16 +609,18 @@ func (q *Queries) UpdateOrder(ctx context.Context, arg UpdateOrderParams) (Updat
 
 const updateOrderStatus = `-- name: UpdateOrderStatus :one
 UPDATE "order".orders
-SET status       = $2,
-    packed_at    = CASE WHEN $2 IN ('packing','ready_to_ship') AND packed_at IS NULL
-                        THEN NOW() ELSE packed_at END,
-    shipped_at   = CASE WHEN $2 = 'shipped'   THEN NOW() ELSE shipped_at   END,
-    delivered_at = CASE WHEN $2 = 'delivered' THEN NOW() ELSE delivered_at END,
-    cancelled_at = CASE WHEN $2 = 'cancelled' THEN NOW() ELSE cancelled_at END,
+SET status        = $2,
+    confirmed_at  = CASE WHEN $2 = 'confirmed'  AND confirmed_at IS NULL
+                         THEN NOW() ELSE confirmed_at END,
+    packed_at     = CASE WHEN $2 IN ('packing','ready_to_ship') AND packed_at IS NULL
+                         THEN NOW() ELSE packed_at END,
+    shipped_at    = CASE WHEN $2 = 'shipped'    THEN NOW() ELSE shipped_at    END,
+    delivered_at  = CASE WHEN $2 = 'delivered'  THEN NOW() ELSE delivered_at  END,
+    cancelled_at  = CASE WHEN $2 = 'cancelled'  THEN NOW() ELSE cancelled_at  END,
     cancel_reason = COALESCE($3, cancel_reason)
 WHERE id = $1
 RETURNING id, order_number, status,
-          packed_at, shipped_at, delivered_at, cancelled_at, cancel_reason,
+          confirmed_at, packed_at, shipped_at, delivered_at, cancelled_at, cancel_reason,
           updated_at
 `
 
@@ -607,6 +634,7 @@ type UpdateOrderStatusRow struct {
 	ID           pgtype.UUID        `json:"id"`
 	OrderNumber  string             `json:"order_number"`
 	Status       string             `json:"status"`
+	ConfirmedAt  pgtype.Timestamptz `json:"confirmed_at"`
 	PackedAt     pgtype.Timestamptz `json:"packed_at"`
 	ShippedAt    pgtype.Timestamptz `json:"shipped_at"`
 	DeliveredAt  pgtype.Timestamptz `json:"delivered_at"`
@@ -623,6 +651,7 @@ func (q *Queries) UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusPa
 		&i.ID,
 		&i.OrderNumber,
 		&i.Status,
+		&i.ConfirmedAt,
 		&i.PackedAt,
 		&i.ShippedAt,
 		&i.DeliveredAt,
