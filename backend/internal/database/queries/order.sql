@@ -86,12 +86,12 @@ SET customer_name    = COALESCE(sqlc.narg('customer_name'),    customer_name),
                      - COALESCE(sqlc.narg('discount_total'),   discount_total),
     note             = COALESCE(sqlc.narg('note'),             note)
 WHERE id = $1
-RETURNING id, order_number, channel, status,
+RETURNING id, order_number, channel, channel_order_id, status,
           customer_name, customer_phone, shipping_address,
           shipping_method, shipping_cost,
           is_cod, cod_amount,
           subtotal, discount_total, total,
-          note, created_at, updated_at;
+          note, created_by, created_at, updated_at;
 
 -- name: UpdateOrderStatus :one
 -- อัพเดต status + timestamp ที่เกี่ยวข้องอัตโนมัติ

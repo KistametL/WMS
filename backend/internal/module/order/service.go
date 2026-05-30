@@ -27,6 +27,7 @@ var (
 	ErrSKUNotFound           = errors.New("sku not found")
 	ErrSKUInactive           = errors.New("sku is inactive")
 	ErrDuplicateChannelOrder = errors.New("order with this channel_order_id already exists")
+	ErrInvalidInput          = errors.New("invalid input")
 )
 
 // ── Service ───────────────────────────────────────────────────────
@@ -78,6 +79,13 @@ func (s *Service) CreateOrder(ctx context.Context, req CreateOrderRequest, userI
 			return nil, fmt.Errorf("%w: %s", ErrSKUInactive, sku.SkuCode)
 		}
 		skuMap[item.SKUID] = skuInfo{Code: sku.SkuCode, Name: sku.Name}
+
+		// N1: ตรวจว่า discount ไม่เกิน line total ป้องกัน negative subtotal ใน DB
+		maxDiscount := item.UnitPrice * float64(item.Quantity)
+		if item.DiscountAmount > maxDiscount {
+			return nil, fmt.Errorf("%w: discount %.2f exceeds line total %.2f for %s",
+				ErrInvalidInput, item.DiscountAmount, maxDiscount, sku.SkuCode)
+		}
 	}
 
 	// ── 1b. Validate shipping_address format ─────────────────────────
@@ -106,8 +114,9 @@ func (s *Service) CreateOrder(ctx context.Context, req CreateOrderRequest, userI
 	}
 
 	// ── 3. Transaction ───────────────────────────────────────────────
-	var createdOrder db.CreateOrderRow
-	var createdItems []db.CreateOrderItemRow
+	// N4 fix: capture order ID เท่านั้น แล้วเรียก GetOrder หลัง TX
+	// เพื่อให้ response รวม history ครั้งแรก (pending) ด้วย
+	var orderID pgtype.UUID
 
 	txErr := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
@@ -119,22 +128,21 @@ func (s *Service) CreateOrder(ctx context.Context, req CreateOrderRequest, userI
 
 		// ── Re-validate SKUs inside TX (catch deactivation race) ─────────
 		// SKU อาจถูก deactivate ระหว่าง pre-check (step 1) กับ INSERT จริง
-		// ทำซ้ำภายใน TX เพื่อ guarantee ว่า SKU ยังคง active ณ เวลา insert
 		for _, item := range req.Items {
 			pgSkuID, _ := pgutil.ParseUUID(item.SKUID)
 			sku, err := q.GetSKUByID(ctx, pgSkuID)
 			if err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
-					return fmt.Errorf("sku %q was deleted after validation", item.SKUID)
+					return fmt.Errorf("%w: %s (deleted after validation)", ErrSKUNotFound, item.SKUID)
 				}
 				return err
 			}
 			if !sku.IsActive {
-				return fmt.Errorf("sku %q was deactivated after validation", sku.SkuCode)
+				return fmt.Errorf("%w: %s (deactivated after validation)", ErrSKUInactive, sku.SkuCode)
 			}
 		}
 
-		createdOrder, err = q.CreateOrder(ctx, db.CreateOrderParams{
+		created, err := q.CreateOrder(ctx, db.CreateOrderParams{
 			OrderNumber:     orderNum,
 			Channel:         req.Channel,
 			ChannelOrderID:  toText(req.ChannelOrderID),
@@ -153,21 +161,20 @@ func (s *Service) CreateOrder(ctx context.Context, req CreateOrderRequest, userI
 		})
 		if err != nil {
 			// idx_orders_channel_order_unique: (channel, channel_order_id) ซ้ำ
-			// → webhook ส่งซ้ำ หรือ duplicate request
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 				return ErrDuplicateChannelOrder
 			}
 			return fmt.Errorf("create order: %w", err)
 		}
+		orderID = created.ID
 
-		createdItems = make([]db.CreateOrderItemRow, 0, len(req.Items))
 		for _, item := range req.Items {
 			info := skuMap[item.SKUID]
-			pgSkuID, _ := pgutil.ParseUUID(item.SKUID) // validated above
+			pgSkuID, _ := pgutil.ParseUUID(item.SKUID)
 			lineTotal := (item.UnitPrice * float64(item.Quantity)) - item.DiscountAmount
-			created, err := q.CreateOrderItem(ctx, db.CreateOrderItemParams{
-				OrderID:        createdOrder.ID,
+			if _, err := q.CreateOrderItem(ctx, db.CreateOrderItemParams{
+				OrderID:        created.ID,
 				SkuID:          pgSkuID,
 				SkuCode:        info.Code,
 				Name:           info.Name,
@@ -175,15 +182,13 @@ func (s *Service) CreateOrder(ctx context.Context, req CreateOrderRequest, userI
 				UnitPrice:      toNumeric(item.UnitPrice),
 				TotalPrice:     toNumeric(lineTotal),
 				DiscountAmount: toNumeric(item.DiscountAmount),
-			})
-			if err != nil {
+			}); err != nil {
 				return fmt.Errorf("create order item: %w", err)
 			}
-			createdItems = append(createdItems, created)
 		}
 
 		return q.CreateStatusHistory(ctx, db.CreateStatusHistoryParams{
-			OrderID:    createdOrder.ID,
+			OrderID:    created.ID,
 			ToStatus:   StatusPending,
 			FromStatus: pgtype.Text{},
 			Note:       pgtype.Text{},
@@ -194,7 +199,8 @@ func (s *Service) CreateOrder(ctx context.Context, req CreateOrderRequest, userI
 		return nil, txErr
 	}
 
-	return createOrderToDetail(createdOrder, createdItems), nil
+	// N4 fix: GetOrder รวม items + history (pending) ครบ — consistent กับ GET /orders/:id
+	return s.GetOrder(ctx, pgutil.UUIDString(orderID))
 }
 
 // ── Get ───────────────────────────────────────────────────────────
@@ -404,7 +410,7 @@ func (s *Service) UpdateStatus(ctx context.Context, id string, req UpdateStatusR
 	case StatusShipped:
 		return s.fulfillAndShip(ctx, pgID, existing.Status, req.Note, userPgID)
 	default:
-		return s.applyStatusUpdate(ctx, pgID, existing.Status, req.Status, req.Note, pgtype.Text{}, userPgID)
+		return s.applyStatusUpdate(ctx, pgID, existing.Status, req.Status, req.Note, userPgID)
 	}
 }
 
@@ -719,7 +725,9 @@ func (s *Service) cancelWithLock(ctx context.Context, pgID pgtype.UUID, fromStat
 // C1 fix: เพิ่ม GetOrderByIDForUpdate เพื่อ lock orders row ก่อน UPDATE
 // ป้องกัน race condition ที่ concurrent cancel อาจ cancel order ไปแล้ว
 // แต่ TX นี้ยัง set status = picking บน cancelled order
-func (s *Service) applyStatusUpdate(ctx context.Context, pgID pgtype.UUID, fromStatus, toStatus string, note *string, cancelReason pgtype.Text, userPgID pgtype.UUID) (*OrderDetailResponse, error) {
+//
+// N2 fix: ตัด cancelReason parameter ออก — ไม่เคยใช้ใน path นี้เลย
+func (s *Service) applyStatusUpdate(ctx context.Context, pgID pgtype.UUID, fromStatus, toStatus string, note *string, userPgID pgtype.UUID) (*OrderDetailResponse, error) {
 	txErr := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 
@@ -734,9 +742,8 @@ func (s *Service) applyStatusUpdate(ctx context.Context, pgID pgtype.UUID, fromS
 		}
 
 		if _, err := q.UpdateOrderStatus(ctx, db.UpdateOrderStatusParams{
-			ID:           pgID,
-			Status:       toStatus,
-			CancelReason: cancelReason,
+			ID:     pgID,
+			Status: toStatus,
 		}); err != nil {
 			return err
 		}
@@ -775,59 +782,6 @@ func generateOrderNumber(ctx context.Context, tx pgx.Tx) (string, error) {
 }
 
 // ── Converters ────────────────────────────────────────────────────
-
-func createOrderToDetail(o db.CreateOrderRow, items []db.CreateOrderItemRow) *OrderDetailResponse {
-	base := orderBaseFromCreate(o)
-	respItems := make([]OrderItemResponse, len(items))
-	for i, it := range items {
-		respItems[i] = createItemToResponse(it)
-	}
-	return &OrderDetailResponse{
-		OrderResponse: base,
-		Items:         respItems,
-		History:       []StatusHistoryResponse{},
-	}
-}
-
-func orderBaseFromCreate(o db.CreateOrderRow) OrderResponse {
-	resp := OrderResponse{
-		ID:            pgutil.UUIDString(o.ID),
-		OrderNumber:   o.OrderNumber,
-		Channel:       o.Channel,
-		Status:        o.Status,
-		ShippingCost:  numericToFloat(o.ShippingCost),
-		IsCOD:         o.IsCod,
-		CODAmount:     numericToFloat(o.CodAmount),
-		Subtotal:      numericToFloat(o.Subtotal),
-		DiscountTotal: numericToFloat(o.DiscountTotal),
-		Total:         numericToFloat(o.Total),
-		CreatedAt:     o.CreatedAt.Time,
-		UpdatedAt:     o.UpdatedAt.Time,
-	}
-	if o.ChannelOrderID.Valid {
-		resp.ChannelOrderID = &o.ChannelOrderID.String
-	}
-	if o.CustomerName.Valid {
-		resp.CustomerName = &o.CustomerName.String
-	}
-	if o.CustomerPhone.Valid {
-		resp.CustomerPhone = &o.CustomerPhone.String
-	}
-	if len(o.ShippingAddress) > 0 {
-		resp.ShippingAddress = o.ShippingAddress
-	}
-	if o.ShippingMethod.Valid {
-		resp.ShippingMethod = &o.ShippingMethod.String
-	}
-	if o.Note.Valid {
-		resp.Note = &o.Note.String
-	}
-	if o.CreatedBy.Valid {
-		s := pgutil.UUIDString(o.CreatedBy)
-		resp.CreatedBy = &s
-	}
-	return resp
-}
 
 func orderDetailToResponse(o db.GetOrderByIDRow, items []db.ListOrderItemsRow, history []db.OrderStatusHistory) *OrderDetailResponse {
 	resp := OrderResponse{
@@ -949,6 +903,10 @@ func updateRowToResponse(r db.UpdateOrderRow) *OrderResponse {
 		CreatedAt:     r.CreatedAt.Time,
 		UpdatedAt:     r.UpdatedAt.Time,
 	}
+	// M4 fix: include fields now present in RETURNING clause
+	if r.ChannelOrderID.Valid {
+		resp.ChannelOrderID = &r.ChannelOrderID.String
+	}
 	if r.CustomerName.Valid {
 		resp.CustomerName = &r.CustomerName.String
 	}
@@ -964,20 +922,11 @@ func updateRowToResponse(r db.UpdateOrderRow) *OrderResponse {
 	if r.Note.Valid {
 		resp.Note = &r.Note.String
 	}
-	return resp
-}
-
-func createItemToResponse(r db.CreateOrderItemRow) OrderItemResponse {
-	return OrderItemResponse{
-		ID:             r.ID,
-		SKUID:          pgutil.UUIDString(r.SkuID),
-		SKUCode:        r.SkuCode,
-		Name:           r.Name,
-		Quantity:       r.Quantity,
-		UnitPrice:      numericToFloat(r.UnitPrice),
-		DiscountAmount: numericToFloat(r.DiscountAmount),
-		TotalPrice:     numericToFloat(r.TotalPrice),
+	if r.CreatedBy.Valid {
+		s := pgutil.UUIDString(r.CreatedBy)
+		resp.CreatedBy = &s
 	}
+	return resp
 }
 
 func listItemToResponse(r db.ListOrderItemsRow) OrderItemResponse {
@@ -1017,14 +966,17 @@ func historyToResponse(h db.OrderStatusHistory) StatusHistoryResponse {
 // validateShippingAddress ตรวจว่า shipping_address เป็น JSON object ถ้า provided
 // json.RawMessage รับทุก valid JSON value (string, number, array ฯลฯ)
 // แต่ JSONB address ต้องเป็น object เท่านั้น
+//
+// N5 fix: ไม่ expose underlying json error (มี Go type name ใน message)
+// M2 fix: wrap ErrInvalidInput ให้ handler map → 400 ได้ถูกต้อง
 func validateShippingAddress(addr json.RawMessage) error {
 	if len(addr) == 0 || string(addr) == "null" {
 		return nil // optional field — ไม่ต้องส่งก็ได้
 	}
-	// ตรวจว่าเป็น JSON object (ขึ้นต้นด้วย '{')
 	var obj map[string]any
 	if err := json.Unmarshal(addr, &obj); err != nil {
-		return fmt.Errorf("shipping_address must be a JSON object: %w", err)
+		return fmt.Errorf("%w: shipping_address must be a JSON object, e.g. {\"street\":\"...\"}",
+			ErrInvalidInput)
 	}
 	return nil
 }

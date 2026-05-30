@@ -1,7 +1,10 @@
 package order
 
 import (
+	"context"
 	"errors"
+	"io"
+	"log/slog"
 
 	"github.com/gin-gonic/gin"
 
@@ -9,11 +12,23 @@ import (
 	"github.com/KistametL/WMS/backend/pkg/response"
 )
 
-type Handler struct {
-	service *Service
+// orderService is the interface Handler depends on.
+// N3 fix: decoupling from concrete *Service enables handler unit tests
+// without a real database connection.
+type orderService interface {
+	CreateOrder(ctx context.Context, req CreateOrderRequest, userID string) (*OrderDetailResponse, error)
+	GetOrder(ctx context.Context, id string) (*OrderDetailResponse, error)
+	ListOrders(ctx context.Context, q ListOrdersQuery) (*ListResponse[OrderResponse], error)
+	UpdateOrder(ctx context.Context, id string, req UpdateOrderRequest) (*OrderResponse, error)
+	UpdateStatus(ctx context.Context, id string, req UpdateStatusRequest, userID string) (*OrderDetailResponse, error)
+	CancelOrder(ctx context.Context, id string, req CancelOrderRequest, userID string) (*OrderDetailResponse, error)
 }
 
-func NewHandler(service *Service) *Handler {
+type Handler struct {
+	service orderService
+}
+
+func NewHandler(service orderService) *Handler {
 	return &Handler{service: service}
 }
 
@@ -53,7 +68,7 @@ func (h *Handler) ListOrders(c *gin.Context) {
 
 	result, err := h.service.ListOrders(c.Request.Context(), q)
 	if err != nil {
-		response.InternalError(c)
+		h.internalError(c, "ListOrders", err)
 		return
 	}
 	response.OK(c, result)
@@ -78,12 +93,14 @@ func (h *Handler) CreateOrder(c *gin.Context) {
 			errors.Is(err, ErrInsufficientStock):
 			// 422: business rule violation (SKU ไม่มี / inactive / stock ไม่พอ)
 			response.UnprocessableEntity(c, err.Error())
+		case errors.Is(err, ErrInvalidInput):
+			// 400: input ผ่าน binding แล้ว แต่ semantic ไม่ถูก (discount > total, bad address)
+			response.BadRequest(c, err.Error())
 		case errors.Is(err, ErrDuplicateChannelOrder):
 			// 409: channel webhook ส่งซ้ำ หรือ duplicate request
 			response.Conflict(c, err.Error())
 		default:
-			// 500: DB error หรือ unexpected — ไม่ส่ง raw error ออก (security)
-			response.InternalError(c)
+			h.internalError(c, "CreateOrder", err)
 		}
 		return
 	}
@@ -101,7 +118,7 @@ func (h *Handler) GetOrder(c *gin.Context) {
 			response.NotFound(c, "order not found")
 			return
 		}
-		response.InternalError(c)
+		h.internalError(c, "GetOrder", err)
 		return
 	}
 	response.OK(c, result)
@@ -125,8 +142,11 @@ func (h *Handler) UpdateOrder(c *gin.Context) {
 			response.NotFound(c, "order not found")
 		case errors.Is(err, ErrOrderNotEditable):
 			response.UnprocessableEntity(c, err.Error())
+		case errors.Is(err, ErrInvalidInput):
+			// M2 fix: validateShippingAddress → 400 ไม่ใช่ 500
+			response.BadRequest(c, err.Error())
 		default:
-			response.InternalError(c)
+			h.internalError(c, "UpdateOrder", err)
 		}
 		return
 	}
@@ -157,7 +177,7 @@ func (h *Handler) UpdateStatus(c *gin.Context) {
 		case errors.Is(err, ErrInsufficientStock):
 			response.UnprocessableEntity(c, err.Error())
 		default:
-			response.InternalError(c)
+			h.internalError(c, "UpdateStatus", err)
 		}
 		return
 	}
@@ -166,12 +186,13 @@ func (h *Handler) UpdateStatus(c *gin.Context) {
 
 // CancelOrder godoc
 // POST /orders/:id/cancel
-// Body: {"reason": "..."}  (optional)
+// Body: {"reason": "..."}  (optional — empty body is fine)
 func (h *Handler) CancelOrder(c *gin.Context) {
 	id := c.Param("id")
 
+	// M3 fix: reason เป็น optional — empty/missing body คืน default struct โดยไม่ error
 	var req CancelOrderRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
 		response.BadRequest(c, err.Error())
 		return
 	}
@@ -186,17 +207,32 @@ func (h *Handler) CancelOrder(c *gin.Context) {
 		case errors.Is(err, ErrInvalidTransition):
 			response.UnprocessableEntity(c, err.Error())
 		default:
-			response.InternalError(c)
+			h.internalError(c, "CancelOrder", err)
 		}
 		return
 	}
 	response.OK(c, result)
 }
 
-// ── Helper ────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────
 
 func getUserID(c *gin.Context) string {
 	v, _ := c.Get(middleware.CtxUserID)
 	s, _ := v.(string)
 	return s
+}
+
+// internalError logs the unexpected error with context and returns 500.
+// ขาดไป fix: structured logging ด้วย slog ป้องกัน silent failures ใน production
+// — ทุก unexpected error จะ log ด้วย operation, path, user_id, error
+func (h *Handler) internalError(c *gin.Context, op string, err error) {
+	slog.ErrorContext(c.Request.Context(), "order: unexpected error",
+		"op", op,
+		"method", c.Request.Method,
+		"path", c.FullPath(),
+		"order_id", c.Param("id"),
+		"user_id", getUserID(c),
+		"error", err,
+	)
+	response.InternalError(c)
 }

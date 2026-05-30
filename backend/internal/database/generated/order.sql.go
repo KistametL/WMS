@@ -531,12 +531,12 @@ SET customer_name    = COALESCE($2,    customer_name),
                      - COALESCE($7,   discount_total),
     note             = COALESCE($8,             note)
 WHERE id = $1
-RETURNING id, order_number, channel, status,
+RETURNING id, order_number, channel, channel_order_id, status,
           customer_name, customer_phone, shipping_address,
           shipping_method, shipping_cost,
           is_cod, cod_amount,
           subtotal, discount_total, total,
-          note, created_at, updated_at
+          note, created_by, created_at, updated_at
 `
 
 type UpdateOrderParams struct {
@@ -554,6 +554,7 @@ type UpdateOrderRow struct {
 	ID              pgtype.UUID        `json:"id"`
 	OrderNumber     string             `json:"order_number"`
 	Channel         string             `json:"channel"`
+	ChannelOrderID  pgtype.Text        `json:"channel_order_id"`
 	Status          string             `json:"status"`
 	CustomerName    pgtype.Text        `json:"customer_name"`
 	CustomerPhone   pgtype.Text        `json:"customer_phone"`
@@ -566,6 +567,7 @@ type UpdateOrderRow struct {
 	DiscountTotal   pgtype.Numeric     `json:"discount_total"`
 	Total           pgtype.Numeric     `json:"total"`
 	Note            pgtype.Text        `json:"note"`
+	CreatedBy       pgtype.UUID        `json:"created_by"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
@@ -589,6 +591,7 @@ func (q *Queries) UpdateOrder(ctx context.Context, arg UpdateOrderParams) (Updat
 		&i.ID,
 		&i.OrderNumber,
 		&i.Channel,
+		&i.ChannelOrderID,
 		&i.Status,
 		&i.CustomerName,
 		&i.CustomerPhone,
@@ -601,6 +604,7 @@ func (q *Queries) UpdateOrder(ctx context.Context, arg UpdateOrderParams) (Updat
 		&i.DiscountTotal,
 		&i.Total,
 		&i.Note,
+		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
