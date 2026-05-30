@@ -111,7 +111,7 @@ func (h *Handler) UpdateCategory(c *gin.Context) {
 		return
 	}
 
-	result, err := h.service.UpdateCategory(c.Request.Context(), id, req)
+	result, err := h.service.UpdateCategory(c.Request.Context(), id, req, middleware.GetUserID(c))
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "category not found")
@@ -193,7 +193,7 @@ func (h *Handler) UpdateProduct(c *gin.Context) {
 		return
 	}
 
-	result, err := h.service.UpdateProduct(c.Request.Context(), id, req)
+	result, err := h.service.UpdateProduct(c.Request.Context(), id, req, middleware.GetUserID(c))
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.NotFound(c, "product not found")
@@ -270,7 +270,7 @@ func (h *Handler) UpdateSKU(c *gin.Context) {
 		return
 	}
 
-	result, err := h.service.UpdateSKU(c.Request.Context(), id, req)
+	result, err := h.service.UpdateSKU(c.Request.Context(), id, req, middleware.GetUserID(c))
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrNotFound):

@@ -36,7 +36,8 @@ func (q *Queries) CountProducts(ctx context.Context, arg CountProductsParams) (i
 const createCategory = `-- name: CreateCategory :one
 INSERT INTO product.categories (name, description, parent_id)
 VALUES ($1, $2, $3)
-RETURNING id, name, description, parent_id, is_active, created_at, updated_at
+RETURNING id, name, description, parent_id, is_active, updated_by,
+          created_at, updated_at
 `
 
 type CreateCategoryParams struct {
@@ -51,6 +52,7 @@ type CreateCategoryRow struct {
 	Description pgtype.Text        `json:"description"`
 	ParentID    pgtype.Int4        `json:"parent_id"`
 	IsActive    bool               `json:"is_active"`
+	UpdatedBy   pgtype.UUID        `json:"updated_by"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
@@ -64,6 +66,7 @@ func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) 
 		&i.Description,
 		&i.ParentID,
 		&i.IsActive,
+		&i.UpdatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -73,7 +76,8 @@ func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) 
 const createProduct = `-- name: CreateProduct :one
 INSERT INTO product.products (category_id, name, description)
 VALUES ($1, $2, $3)
-RETURNING id, category_id, name, description, is_active, created_at, updated_at
+RETURNING id, category_id, name, description, is_active, updated_by,
+          created_at, updated_at
 `
 
 type CreateProductParams struct {
@@ -88,6 +92,7 @@ type CreateProductRow struct {
 	Name        string             `json:"name"`
 	Description pgtype.Text        `json:"description"`
 	IsActive    bool               `json:"is_active"`
+	UpdatedBy   pgtype.UUID        `json:"updated_by"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
@@ -101,6 +106,7 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (C
 		&i.Name,
 		&i.Description,
 		&i.IsActive,
+		&i.UpdatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -123,7 +129,8 @@ INSERT INTO product.skus (
     $8
 )
 RETURNING id, product_id, sku_code, name, cost_price, selling_price,
-          compare_at_price, weight_grams, attributes, is_active, created_at, updated_at
+          compare_at_price, weight_grams, attributes, is_active,
+          updated_by, created_at, updated_at
 `
 
 type CreateSKUParams struct {
@@ -148,6 +155,7 @@ type CreateSKURow struct {
 	WeightGrams    pgtype.Int4        `json:"weight_grams"`
 	Attributes     []byte             `json:"attributes"`
 	IsActive       bool               `json:"is_active"`
+	UpdatedBy      pgtype.UUID        `json:"updated_by"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
@@ -175,6 +183,7 @@ func (q *Queries) CreateSKU(ctx context.Context, arg CreateSKUParams) (CreateSKU
 		&i.WeightGrams,
 		&i.Attributes,
 		&i.IsActive,
+		&i.UpdatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -182,7 +191,8 @@ func (q *Queries) CreateSKU(ctx context.Context, arg CreateSKUParams) (CreateSKU
 }
 
 const getCategoryByID = `-- name: GetCategoryByID :one
-SELECT id, name, description, parent_id, is_active, created_at, updated_at
+SELECT id, name, description, parent_id, is_active, updated_by,
+       created_at, updated_at
 FROM product.categories
 WHERE id = $1 AND deleted_at IS NULL
 `
@@ -193,6 +203,7 @@ type GetCategoryByIDRow struct {
 	Description pgtype.Text        `json:"description"`
 	ParentID    pgtype.Int4        `json:"parent_id"`
 	IsActive    bool               `json:"is_active"`
+	UpdatedBy   pgtype.UUID        `json:"updated_by"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
@@ -206,6 +217,7 @@ func (q *Queries) GetCategoryByID(ctx context.Context, id int32) (GetCategoryByI
 		&i.Description,
 		&i.ParentID,
 		&i.IsActive,
+		&i.UpdatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -213,7 +225,8 @@ func (q *Queries) GetCategoryByID(ctx context.Context, id int32) (GetCategoryByI
 }
 
 const getProductByID = `-- name: GetProductByID :one
-SELECT id, category_id, name, description, is_active, created_at, updated_at
+SELECT id, category_id, name, description, is_active, updated_by,
+       created_at, updated_at
 FROM product.products
 WHERE id = $1 AND deleted_at IS NULL
 `
@@ -224,6 +237,7 @@ type GetProductByIDRow struct {
 	Name        string             `json:"name"`
 	Description pgtype.Text        `json:"description"`
 	IsActive    bool               `json:"is_active"`
+	UpdatedBy   pgtype.UUID        `json:"updated_by"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
@@ -237,6 +251,7 @@ func (q *Queries) GetProductByID(ctx context.Context, id pgtype.UUID) (GetProduc
 		&i.Name,
 		&i.Description,
 		&i.IsActive,
+		&i.UpdatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -245,7 +260,8 @@ func (q *Queries) GetProductByID(ctx context.Context, id pgtype.UUID) (GetProduc
 
 const getSKUByID = `-- name: GetSKUByID :one
 SELECT id, product_id, sku_code, name, cost_price, selling_price,
-       compare_at_price, weight_grams, attributes, is_active, created_at, updated_at
+       compare_at_price, weight_grams, attributes, is_active,
+       updated_by, created_at, updated_at
 FROM product.skus
 WHERE id = $1 AND deleted_at IS NULL
 `
@@ -261,6 +277,7 @@ type GetSKUByIDRow struct {
 	WeightGrams    pgtype.Int4        `json:"weight_grams"`
 	Attributes     []byte             `json:"attributes"`
 	IsActive       bool               `json:"is_active"`
+	UpdatedBy      pgtype.UUID        `json:"updated_by"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
@@ -279,6 +296,7 @@ func (q *Queries) GetSKUByID(ctx context.Context, id pgtype.UUID) (GetSKUByIDRow
 		&i.WeightGrams,
 		&i.Attributes,
 		&i.IsActive,
+		&i.UpdatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -287,7 +305,8 @@ func (q *Queries) GetSKUByID(ctx context.Context, id pgtype.UUID) (GetSKUByIDRow
 
 const listCategories = `-- name: ListCategories :many
 
-SELECT id, name, description, parent_id, is_active, created_at, updated_at
+SELECT id, name, description, parent_id, is_active, updated_by,
+       created_at, updated_at
 FROM product.categories
 WHERE deleted_at IS NULL
 ORDER BY name ASC
@@ -299,6 +318,7 @@ type ListCategoriesRow struct {
 	Description pgtype.Text        `json:"description"`
 	ParentID    pgtype.Int4        `json:"parent_id"`
 	IsActive    bool               `json:"is_active"`
+	UpdatedBy   pgtype.UUID        `json:"updated_by"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
@@ -321,6 +341,7 @@ func (q *Queries) ListCategories(ctx context.Context) ([]ListCategoriesRow, erro
 			&i.Description,
 			&i.ParentID,
 			&i.IsActive,
+			&i.UpdatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -336,7 +357,8 @@ func (q *Queries) ListCategories(ctx context.Context) ([]ListCategoriesRow, erro
 
 const listProducts = `-- name: ListProducts :many
 
-SELECT id, category_id, name, description, is_active, created_at, updated_at
+SELECT id, category_id, name, description, is_active, updated_by,
+       created_at, updated_at
 FROM product.products
 WHERE deleted_at IS NULL
   AND ($1::text     IS NULL OR name ILIKE '%' || $1 || '%')
@@ -361,6 +383,7 @@ type ListProductsRow struct {
 	Name        string             `json:"name"`
 	Description pgtype.Text        `json:"description"`
 	IsActive    bool               `json:"is_active"`
+	UpdatedBy   pgtype.UUID        `json:"updated_by"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
@@ -389,6 +412,7 @@ func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]L
 			&i.Name,
 			&i.Description,
 			&i.IsActive,
+			&i.UpdatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -405,7 +429,8 @@ func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]L
 const listSKUsByProduct = `-- name: ListSKUsByProduct :many
 
 SELECT id, product_id, sku_code, name, cost_price, selling_price,
-       compare_at_price, weight_grams, attributes, is_active, created_at, updated_at
+       compare_at_price, weight_grams, attributes, is_active,
+       updated_by, created_at, updated_at
 FROM product.skus
 WHERE product_id = $1 AND deleted_at IS NULL
 ORDER BY created_at ASC
@@ -422,6 +447,7 @@ type ListSKUsByProductRow struct {
 	WeightGrams    pgtype.Int4        `json:"weight_grams"`
 	Attributes     []byte             `json:"attributes"`
 	IsActive       bool               `json:"is_active"`
+	UpdatedBy      pgtype.UUID        `json:"updated_by"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
@@ -449,6 +475,7 @@ func (q *Queries) ListSKUsByProduct(ctx context.Context, productID pgtype.UUID) 
 			&i.WeightGrams,
 			&i.Attributes,
 			&i.IsActive,
+			&i.UpdatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -497,9 +524,11 @@ UPDATE product.categories
 SET name        = COALESCE($1,        name),
     description = COALESCE($2, description),
     parent_id   = COALESCE($3,   parent_id),
-    is_active   = COALESCE($4,   is_active)
-WHERE id = $5 AND deleted_at IS NULL
-RETURNING id, name, description, parent_id, is_active, created_at, updated_at
+    is_active   = COALESCE($4,   is_active),
+    updated_by  = $5
+WHERE id = $6 AND deleted_at IS NULL
+RETURNING id, name, description, parent_id, is_active, updated_by,
+          created_at, updated_at
 `
 
 type UpdateCategoryParams struct {
@@ -507,6 +536,7 @@ type UpdateCategoryParams struct {
 	Description pgtype.Text `json:"description"`
 	ParentID    pgtype.Int4 `json:"parent_id"`
 	IsActive    pgtype.Bool `json:"is_active"`
+	UpdatedBy   pgtype.UUID `json:"updated_by"`
 	ID          int32       `json:"id"`
 }
 
@@ -516,6 +546,7 @@ type UpdateCategoryRow struct {
 	Description pgtype.Text        `json:"description"`
 	ParentID    pgtype.Int4        `json:"parent_id"`
 	IsActive    bool               `json:"is_active"`
+	UpdatedBy   pgtype.UUID        `json:"updated_by"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
@@ -526,6 +557,7 @@ func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) 
 		arg.Description,
 		arg.ParentID,
 		arg.IsActive,
+		arg.UpdatedBy,
 		arg.ID,
 	)
 	var i UpdateCategoryRow
@@ -535,6 +567,7 @@ func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) 
 		&i.Description,
 		&i.ParentID,
 		&i.IsActive,
+		&i.UpdatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -546,9 +579,11 @@ UPDATE product.products
 SET category_id = COALESCE($1, category_id),
     name        = COALESCE($2,        name),
     description = COALESCE($3, description),
-    is_active   = COALESCE($4,   is_active)
-WHERE id = $5 AND deleted_at IS NULL
-RETURNING id, category_id, name, description, is_active, created_at, updated_at
+    is_active   = COALESCE($4,   is_active),
+    updated_by  = $5
+WHERE id = $6 AND deleted_at IS NULL
+RETURNING id, category_id, name, description, is_active, updated_by,
+          created_at, updated_at
 `
 
 type UpdateProductParams struct {
@@ -556,6 +591,7 @@ type UpdateProductParams struct {
 	Name        pgtype.Text `json:"name"`
 	Description pgtype.Text `json:"description"`
 	IsActive    pgtype.Bool `json:"is_active"`
+	UpdatedBy   pgtype.UUID `json:"updated_by"`
 	ID          pgtype.UUID `json:"id"`
 }
 
@@ -565,6 +601,7 @@ type UpdateProductRow struct {
 	Name        string             `json:"name"`
 	Description pgtype.Text        `json:"description"`
 	IsActive    bool               `json:"is_active"`
+	UpdatedBy   pgtype.UUID        `json:"updated_by"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
@@ -575,6 +612,7 @@ func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (U
 		arg.Name,
 		arg.Description,
 		arg.IsActive,
+		arg.UpdatedBy,
 		arg.ID,
 	)
 	var i UpdateProductRow
@@ -584,6 +622,7 @@ func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (U
 		&i.Name,
 		&i.Description,
 		&i.IsActive,
+		&i.UpdatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -599,10 +638,12 @@ SET sku_code         = COALESCE($1,         sku_code),
     compare_at_price = COALESCE($5, compare_at_price),
     weight_grams     = COALESCE($6,     weight_grams),
     attributes       = COALESCE($7,       attributes),
-    is_active        = COALESCE($8,        is_active)
-WHERE id = $9 AND deleted_at IS NULL
+    is_active        = COALESCE($8,        is_active),
+    updated_by       = $9
+WHERE id = $10 AND deleted_at IS NULL
 RETURNING id, product_id, sku_code, name, cost_price, selling_price,
-          compare_at_price, weight_grams, attributes, is_active, created_at, updated_at
+          compare_at_price, weight_grams, attributes, is_active,
+          updated_by, created_at, updated_at
 `
 
 type UpdateSKUParams struct {
@@ -614,6 +655,7 @@ type UpdateSKUParams struct {
 	WeightGrams    pgtype.Int4    `json:"weight_grams"`
 	Attributes     []byte         `json:"attributes"`
 	IsActive       pgtype.Bool    `json:"is_active"`
+	UpdatedBy      pgtype.UUID    `json:"updated_by"`
 	ID             pgtype.UUID    `json:"id"`
 }
 
@@ -628,6 +670,7 @@ type UpdateSKURow struct {
 	WeightGrams    pgtype.Int4        `json:"weight_grams"`
 	Attributes     []byte             `json:"attributes"`
 	IsActive       bool               `json:"is_active"`
+	UpdatedBy      pgtype.UUID        `json:"updated_by"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
@@ -642,6 +685,7 @@ func (q *Queries) UpdateSKU(ctx context.Context, arg UpdateSKUParams) (UpdateSKU
 		arg.WeightGrams,
 		arg.Attributes,
 		arg.IsActive,
+		arg.UpdatedBy,
 		arg.ID,
 	)
 	var i UpdateSKURow
@@ -656,6 +700,7 @@ func (q *Queries) UpdateSKU(ctx context.Context, arg UpdateSKUParams) (UpdateSKU
 		&i.WeightGrams,
 		&i.Attributes,
 		&i.IsActive,
+		&i.UpdatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
