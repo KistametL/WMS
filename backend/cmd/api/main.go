@@ -10,6 +10,7 @@ import (
 	"github.com/KistametL/WMS/backend/internal/database"
 	"github.com/KistametL/WMS/backend/internal/middleware"
 	"github.com/KistametL/WMS/backend/internal/module/auth"
+	"github.com/KistametL/WMS/backend/internal/module/product"
 	"github.com/KistametL/WMS/backend/pkg/response"
 )
 
@@ -28,6 +29,9 @@ func main() {
 	}
 
 	r := gin.Default()
+	// Disable trusted-proxy auto-detection to silence Gin's startup warning.
+	// Set this to the actual proxy CIDR(s) if the app runs behind a reverse proxy.
+	r.SetTrustedProxies(nil) //nolint:errcheck // nil input never returns an error
 
 	// Public routes — ไม่ต้อง auth
 	r.GET("/health", func(c *gin.Context) {
@@ -55,6 +59,11 @@ func main() {
 				"permissions": middleware.GetPermissions(c),
 			})
 		})
+
+		// Product module — categories, products, SKUs
+		productService := product.NewService(pool)
+		productHandler := product.NewHandler(productService)
+		productHandler.RegisterRoutes(protected)
 	}
 
 	addr := fmt.Sprintf(":%s", cfg.AppPort)
