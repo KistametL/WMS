@@ -70,7 +70,7 @@ type AuthUserRole struct {
 	AssignedBy pgtype.UUID        `json:"assigned_by"`
 }
 
-type ChannelChannelConfig struct {
+type ChannelConfig struct {
 	ID           int32              `json:"id"`
 	Channel      string             `json:"channel"`
 	Name         string             `json:"name"`
@@ -82,7 +82,7 @@ type ChannelChannelConfig struct {
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
-type ChannelChannelProduct struct {
+type ChannelProduct struct {
 	ID               int64              `json:"id"`
 	ChannelConfigID  int32              `json:"channel_config_id"`
 	SkuID            pgtype.UUID        `json:"sku_id"`
@@ -131,6 +131,19 @@ type InventoryStockMovement struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
+type OrderItem struct {
+	ID             int64              `json:"id"`
+	OrderID        pgtype.UUID        `json:"order_id"`
+	SkuID          pgtype.UUID        `json:"sku_id"`
+	SkuCode        string             `json:"sku_code"`
+	Name           string             `json:"name"`
+	Quantity       int32              `json:"quantity"`
+	UnitPrice      pgtype.Numeric     `json:"unit_price"`
+	TotalPrice     pgtype.Numeric     `json:"total_price"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	DiscountAmount pgtype.Numeric     `json:"discount_amount"`
+}
+
 type OrderOrder struct {
 	ID              pgtype.UUID        `json:"id"`
 	OrderNumber     string             `json:"order_number"`
@@ -156,21 +169,10 @@ type OrderOrder struct {
 	CreatedBy       pgtype.UUID        `json:"created_by"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	DiscountTotal   pgtype.Numeric     `json:"discount_total"`
 }
 
-type OrderOrderItem struct {
-	ID         int64              `json:"id"`
-	OrderID    pgtype.UUID        `json:"order_id"`
-	SkuID      pgtype.UUID        `json:"sku_id"`
-	SkuCode    string             `json:"sku_code"`
-	Name       string             `json:"name"`
-	Quantity   int32              `json:"quantity"`
-	UnitPrice  pgtype.Numeric     `json:"unit_price"`
-	TotalPrice pgtype.Numeric     `json:"total_price"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-}
-
-type OrderOrderStatusHistory struct {
+type OrderStatusHistory struct {
 	ID         int64              `json:"id"`
 	OrderID    pgtype.UUID        `json:"order_id"`
 	FromStatus pgtype.Text        `json:"from_status"`
@@ -190,11 +192,25 @@ type ProductBarcode struct {
 }
 
 type ProductCategory struct {
-	ID        int32              `json:"id"`
-	Name      string             `json:"name"`
-	ParentID  pgtype.Int4        `json:"parent_id"`
+	ID          int32              `json:"id"`
+	Name        string             `json:"name"`
+	ParentID    pgtype.Int4        `json:"parent_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Description pgtype.Text        `json:"description"`
+	IsActive    bool               `json:"is_active"`
+	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
+}
+
+type ProductImage struct {
+	ID        pgtype.UUID        `json:"id"`
+	ProductID pgtype.UUID        `json:"product_id"`
+	SkuID     pgtype.UUID        `json:"sku_id"`
+	Url       string             `json:"url"`
+	AltText   pgtype.Text        `json:"alt_text"`
+	SortOrder int16              `json:"sort_order"`
+	IsPrimary bool               `json:"is_primary"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type ProductProduct struct {
@@ -209,16 +225,17 @@ type ProductProduct struct {
 }
 
 type ProductSku struct {
-	ID           pgtype.UUID        `json:"id"`
-	ProductID    pgtype.UUID        `json:"product_id"`
-	SkuCode      string             `json:"sku_code"`
-	Name         string             `json:"name"`
-	CostPrice    pgtype.Numeric     `json:"cost_price"`
-	SellingPrice pgtype.Numeric     `json:"selling_price"`
-	WeightGrams  pgtype.Int4        `json:"weight_grams"`
-	Attributes   []byte             `json:"attributes"`
-	IsActive     bool               `json:"is_active"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
+	ID             pgtype.UUID        `json:"id"`
+	ProductID      pgtype.UUID        `json:"product_id"`
+	SkuCode        string             `json:"sku_code"`
+	Name           string             `json:"name"`
+	CostPrice      pgtype.Numeric     `json:"cost_price"`
+	SellingPrice   pgtype.Numeric     `json:"selling_price"`
+	WeightGrams    pgtype.Int4        `json:"weight_grams"`
+	Attributes     []byte             `json:"attributes"`
+	IsActive       bool               `json:"is_active"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+	CompareAtPrice pgtype.Numeric     `json:"compare_at_price"`
 }

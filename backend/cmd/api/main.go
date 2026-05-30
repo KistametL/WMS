@@ -10,6 +10,7 @@ import (
 	"github.com/KistametL/WMS/backend/internal/database"
 	"github.com/KistametL/WMS/backend/internal/middleware"
 	"github.com/KistametL/WMS/backend/internal/module/auth"
+	"github.com/KistametL/WMS/backend/internal/module/product"
 	"github.com/KistametL/WMS/backend/pkg/response"
 )
 
@@ -55,6 +56,11 @@ func main() {
 				"permissions": middleware.GetPermissions(c),
 			})
 		})
+
+		// Product module — categories, products, SKUs
+		productService := product.NewService(pool)
+		productHandler := product.NewHandler(productService)
+		productHandler.RegisterRoutes(protected)
 	}
 
 	addr := fmt.Sprintf(":%s", cfg.AppPort)

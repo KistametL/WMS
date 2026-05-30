@@ -11,16 +11,41 @@ import (
 )
 
 type Querier interface {
+	CountProducts(ctx context.Context, arg CountProductsParams) (int64, error)
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) error
+	CreateCategory(ctx context.Context, arg CreateCategoryParams) (CreateCategoryRow, error)
+	CreateProduct(ctx context.Context, arg CreateProductParams) (CreateProductRow, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (CreateRefreshTokenRow, error)
+	CreateSKU(ctx context.Context, arg CreateSKUParams) (CreateSKURow, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
+	GetCategoryByID(ctx context.Context, id int32) (GetCategoryByIDRow, error)
+	GetProductByID(ctx context.Context, id pgtype.UUID) (GetProductByIDRow, error)
 	GetRefreshToken(ctx context.Context, tokenHash string) (GetRefreshTokenRow, error)
+	GetSKUByID(ctx context.Context, id pgtype.UUID) (GetSKUByIDRow, error)
 	GetUserByEmail(ctx context.Context, email string) (AuthUser, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (AuthUser, error)
 	GetUserPermissions(ctx context.Context, userID pgtype.UUID) ([]string, error)
 	GetUserRoles(ctx context.Context, userID pgtype.UUID) ([]GetUserRolesRow, error)
+	// ══════════════════════════════════════════════════════════════════
+	// CATEGORIES
+	// ══════════════════════════════════════════════════════════════════
+	ListCategories(ctx context.Context) ([]ListCategoriesRow, error)
+	// ══════════════════════════════════════════════════════════════════
+	// PRODUCTS
+	// ══════════════════════════════════════════════════════════════════
+	ListProducts(ctx context.Context, arg ListProductsParams) ([]ListProductsRow, error)
+	// ══════════════════════════════════════════════════════════════════
+	// SKUs
+	// ══════════════════════════════════════════════════════════════════
+	ListSKUsByProduct(ctx context.Context, productID pgtype.UUID) ([]ListSKUsByProductRow, error)
 	RevokeAllUserTokens(ctx context.Context, userID pgtype.UUID) error
 	RevokeRefreshToken(ctx context.Context, tokenHash string) error
+	SoftDeleteCategory(ctx context.Context, id int32) error
+	SoftDeleteProduct(ctx context.Context, id pgtype.UUID) error
+	SoftDeleteSKU(ctx context.Context, id pgtype.UUID) error
+	UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (UpdateCategoryRow, error)
+	UpdateProduct(ctx context.Context, arg UpdateProductParams) (UpdateProductRow, error)
+	UpdateSKU(ctx context.Context, arg UpdateSKUParams) (UpdateSKURow, error)
 }
 
 var _ Querier = (*Queries)(nil)
