@@ -12,20 +12,39 @@ import (
 
 type Querier interface {
 	CountProducts(ctx context.Context, arg CountProductsParams) (int64, error)
+	CountStockLevels(ctx context.Context, lowStockOnly pgtype.Bool) (int64, error)
+	CountStockMovements(ctx context.Context, arg CountStockMovementsParams) (int64, error)
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) error
 	CreateCategory(ctx context.Context, arg CreateCategoryParams) (CreateCategoryRow, error)
 	CreateProduct(ctx context.Context, arg CreateProductParams) (CreateProductRow, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (CreateRefreshTokenRow, error)
 	CreateSKU(ctx context.Context, arg CreateSKUParams) (CreateSKURow, error)
+	// ══════════════════════════════════════════════════════════════════
+	// STOCK MOVEMENTS
+	// ══════════════════════════════════════════════════════════════════
+	CreateStockMovement(ctx context.Context, arg CreateStockMovementParams) (InventoryStockMovement, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	GetCategoryByID(ctx context.Context, id int32) (GetCategoryByIDRow, error)
 	GetProductByID(ctx context.Context, id pgtype.UUID) (GetProductByIDRow, error)
 	GetRefreshToken(ctx context.Context, tokenHash string) (GetRefreshTokenRow, error)
 	GetSKUByID(ctx context.Context, id pgtype.UUID) (GetSKUByIDRow, error)
+	// ══════════════════════════════════════════════════════════════════
+	// STOCK LEVELS
+	// ══════════════════════════════════════════════════════════════════
+	// ใช้สำหรับ read-only (GET /inventory/stock/:sku_id)
+	GetStockBySKU(ctx context.Context, skuID pgtype.UUID) (GetStockBySKURow, error)
+	// ใช้ภายใน transaction เพื่อ lock row ก่อน update (SELECT FOR UPDATE)
+	// ไม่ JOIN เพื่อหลีกเลี่ยงความซับซ้อนกับ lock
+	GetStockBySKUForUpdate(ctx context.Context, skuID pgtype.UUID) (InventoryStockLevel, error)
+	GetStockMovement(ctx context.Context, id int64) (InventoryStockMovement, error)
 	GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (GetUserByIDRow, error)
 	GetUserPermissions(ctx context.Context, userID pgtype.UUID) ([]string, error)
 	GetUserRoles(ctx context.Context, userID pgtype.UUID) ([]GetUserRolesRow, error)
+	// สร้าง stock level ด้วย qty=0 ถ้ายังไม่มี; ถ้ามีแล้วไม่เปลี่ยนค่า
+	// ON CONFLICT DO UPDATE ต้องเปลี่ยนอะไรบางอย่าง (PostgreSQL requirement)
+	// → touch updated_at เพื่อให้ RETURNING ส่งค่าปัจจุบันกลับมาเสมอ
+	InitStockLevel(ctx context.Context, skuID pgtype.UUID) (InventoryStockLevel, error)
 	// ══════════════════════════════════════════════════════════════════
 	// CATEGORIES
 	// ══════════════════════════════════════════════════════════════════
@@ -38,14 +57,20 @@ type Querier interface {
 	// SKUs
 	// ══════════════════════════════════════════════════════════════════
 	ListSKUsByProduct(ctx context.Context, productID pgtype.UUID) ([]ListSKUsByProductRow, error)
+	ListStockLevels(ctx context.Context, arg ListStockLevelsParams) ([]ListStockLevelsRow, error)
+	ListStockMovements(ctx context.Context, arg ListStockMovementsParams) ([]InventoryStockMovement, error)
 	RevokeAllUserTokens(ctx context.Context, userID pgtype.UUID) error
 	RevokeRefreshToken(ctx context.Context, tokenHash string) error
 	SoftDeleteCategory(ctx context.Context, id int32) error
 	SoftDeleteProduct(ctx context.Context, id pgtype.UUID) error
 	SoftDeleteSKU(ctx context.Context, id pgtype.UUID) error
 	UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (UpdateCategoryRow, error)
+	UpdateLowStockThreshold(ctx context.Context, arg UpdateLowStockThresholdParams) (InventoryStockLevel, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (UpdateProductRow, error)
 	UpdateSKU(ctx context.Context, arg UpdateSKUParams) (UpdateSKURow, error)
+	// ใช้ภายใน transaction หลัง GetStockBySKUForUpdate
+	// caller รับผิดชอบตรวจสอบ qty_on_hand >= qty_reserved ก่อนเรียก
+	UpdateStockLevel(ctx context.Context, arg UpdateStockLevelParams) (InventoryStockLevel, error)
 }
 
 var _ Querier = (*Queries)(nil)
