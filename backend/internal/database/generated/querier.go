@@ -11,20 +11,34 @@ import (
 )
 
 type Querier interface {
+	CountOrders(ctx context.Context, arg CountOrdersParams) (int64, error)
 	CountProducts(ctx context.Context, arg CountProductsParams) (int64, error)
 	CountStockLevels(ctx context.Context, lowStockOnly pgtype.Bool) (int64, error)
 	CountStockMovements(ctx context.Context, arg CountStockMovementsParams) (int64, error)
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) error
 	CreateCategory(ctx context.Context, arg CreateCategoryParams) (CreateCategoryRow, error)
+	// ══════════════════════════════════════════════════════════════════
+	// ORDERS
+	// ══════════════════════════════════════════════════════════════════
+	CreateOrder(ctx context.Context, arg CreateOrderParams) (CreateOrderRow, error)
+	// ══════════════════════════════════════════════════════════════════
+	// ORDER ITEMS
+	// ══════════════════════════════════════════════════════════════════
+	CreateOrderItem(ctx context.Context, arg CreateOrderItemParams) (CreateOrderItemRow, error)
 	CreateProduct(ctx context.Context, arg CreateProductParams) (CreateProductRow, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (CreateRefreshTokenRow, error)
 	CreateSKU(ctx context.Context, arg CreateSKUParams) (CreateSKURow, error)
+	// ══════════════════════════════════════════════════════════════════
+	// STATUS HISTORY
+	// ══════════════════════════════════════════════════════════════════
+	CreateStatusHistory(ctx context.Context, arg CreateStatusHistoryParams) error
 	// ══════════════════════════════════════════════════════════════════
 	// STOCK MOVEMENTS
 	// ══════════════════════════════════════════════════════════════════
 	CreateStockMovement(ctx context.Context, arg CreateStockMovementParams) (InventoryStockMovement, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	GetCategoryByID(ctx context.Context, id int32) (GetCategoryByIDRow, error)
+	GetOrderByID(ctx context.Context, id pgtype.UUID) (GetOrderByIDRow, error)
 	GetProductByID(ctx context.Context, id pgtype.UUID) (GetProductByIDRow, error)
 	GetRefreshToken(ctx context.Context, tokenHash string) (GetRefreshTokenRow, error)
 	GetSKUByID(ctx context.Context, id pgtype.UUID) (GetSKUByIDRow, error)
@@ -49,6 +63,8 @@ type Querier interface {
 	// CATEGORIES
 	// ══════════════════════════════════════════════════════════════════
 	ListCategories(ctx context.Context) ([]ListCategoriesRow, error)
+	ListOrderItems(ctx context.Context, orderID pgtype.UUID) ([]ListOrderItemsRow, error)
+	ListOrders(ctx context.Context, arg ListOrdersParams) ([]ListOrdersRow, error)
 	// ══════════════════════════════════════════════════════════════════
 	// PRODUCTS
 	// ══════════════════════════════════════════════════════════════════
@@ -57,6 +73,7 @@ type Querier interface {
 	// SKUs
 	// ══════════════════════════════════════════════════════════════════
 	ListSKUsByProduct(ctx context.Context, productID pgtype.UUID) ([]ListSKUsByProductRow, error)
+	ListStatusHistory(ctx context.Context, orderID pgtype.UUID) ([]OrderStatusHistory, error)
 	ListStockLevels(ctx context.Context, arg ListStockLevelsParams) ([]ListStockLevelsRow, error)
 	ListStockMovements(ctx context.Context, arg ListStockMovementsParams) ([]InventoryStockMovement, error)
 	RevokeAllUserTokens(ctx context.Context, userID pgtype.UUID) error
@@ -66,6 +83,11 @@ type Querier interface {
 	SoftDeleteSKU(ctx context.Context, id pgtype.UUID) error
 	UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (UpdateCategoryRow, error)
 	UpdateLowStockThreshold(ctx context.Context, arg UpdateLowStockThresholdParams) (InventoryStockLevel, error)
+	// ใช้สำหรับแก้ข้อมูล order (customer info, shipping, note)
+	// อนุญาตเฉพาะ status pending หรือ confirmed เท่านั้น (validate ใน service)
+	UpdateOrder(ctx context.Context, arg UpdateOrderParams) (UpdateOrderRow, error)
+	// อัพเดต status + timestamp ที่เกี่ยวข้องอัตโนมัติ
+	UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) (UpdateOrderStatusRow, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (UpdateProductRow, error)
 	UpdateSKU(ctx context.Context, arg UpdateSKUParams) (UpdateSKURow, error)
 	// ใช้ภายใน transaction หลัง GetStockBySKUForUpdate
