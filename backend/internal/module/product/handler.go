@@ -252,7 +252,7 @@ func (h *Handler) CreateSKU(c *gin.Context) {
 		case errors.Is(err, ErrNotFound):
 			response.NotFound(c, "product not found")
 		case errors.Is(err, ErrDuplicateSKU):
-			response.BadRequest(c, "sku_code already exists")
+			response.Conflict(c, "sku_code already exists")
 		default:
 			response.InternalError(c)
 		}
@@ -276,7 +276,7 @@ func (h *Handler) UpdateSKU(c *gin.Context) {
 		case errors.Is(err, ErrNotFound):
 			response.NotFound(c, "sku not found")
 		case errors.Is(err, ErrDuplicateSKU):
-			response.BadRequest(c, "sku_code already exists")
+			response.Conflict(c, "sku_code already exists")
 		default:
 			response.InternalError(c)
 		}

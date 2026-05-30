@@ -61,6 +61,7 @@ type AuthUser struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
+	UpdatedBy    pgtype.UUID        `json:"updated_by"`
 }
 
 type AuthUserRole struct {
@@ -80,6 +81,7 @@ type ChannelConfig struct {
 	LastSyncedAt pgtype.Timestamptz `json:"last_synced_at"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	UpdatedBy    pgtype.UUID        `json:"updated_by"`
 }
 
 type ChannelProduct struct {
@@ -200,6 +202,7 @@ type ProductCategory struct {
 	Description pgtype.Text        `json:"description"`
 	IsActive    bool               `json:"is_active"`
 	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
+	UpdatedBy   pgtype.UUID        `json:"updated_by"`
 }
 
 type ProductImage struct {
@@ -222,6 +225,7 @@ type ProductProduct struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
+	UpdatedBy   pgtype.UUID        `json:"updated_by"`
 }
 
 type ProductSku struct {
@@ -238,4 +242,5 @@ type ProductSku struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
 	CompareAtPrice pgtype.Numeric     `json:"compare_at_price"`
+	UpdatedBy      pgtype.UUID        `json:"updated_by"`
 }

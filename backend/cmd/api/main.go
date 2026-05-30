@@ -29,6 +29,9 @@ func main() {
 	}
 
 	r := gin.Default()
+	// Disable trusted-proxy auto-detection to silence Gin's startup warning.
+	// Set this to the actual proxy CIDR(s) if the app runs behind a reverse proxy.
+	r.SetTrustedProxies(nil) //nolint:errcheck // nil input never returns an error
 
 	// Public routes — ไม่ต้อง auth
 	r.GET("/health", func(c *gin.Context) {
