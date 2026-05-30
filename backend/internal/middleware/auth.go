@@ -179,7 +179,7 @@ func getString(c *gin.Context, key string) string {
 	return str
 }
 
-// JWT stores arrays as []interface{} (JSON decoded), not []string
+// JWT stores arrays as []any (JSON decoded), not []string
 // ต้องแปลงก่อนใช้งาน
 func getStringSlice(c *gin.Context, key string) []string {
 	val, exists := c.Get(key)

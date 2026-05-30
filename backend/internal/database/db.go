@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -11,17 +12,20 @@ import (
 )
 
 func NewPool(cfg *config.Config) (*pgxpool.Pool, error) {
-	dsn := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Database.Host,
-		cfg.Database.Port,
-		cfg.Database.User,
-		cfg.Database.Password,
-		cfg.Database.Name,
-		cfg.Database.SSLMode,
-	)
+	// Build the DSN as a URL so net/url handles percent-encoding automatically.
+	// Using fmt.Sprintf with key=value format would break if the password
+	// contains spaces, single-quotes, or backslashes (PostgreSQL libpq spec).
+	u := &url.URL{
+		Scheme: "postgresql",
+		User:   url.UserPassword(cfg.Database.User, cfg.Database.Password),
+		Host:   cfg.Database.Host + ":" + cfg.Database.Port,
+		Path:   "/" + cfg.Database.Name,
+	}
+	q := url.Values{}
+	q.Set("sslmode", cfg.Database.SSLMode)
+	u.RawQuery = q.Encode()
 
-	pool, err := pgxpool.New(context.Background(), dsn)
+	pool, err := pgxpool.New(context.Background(), u.String())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create connection pool: %w", err)
 	}
@@ -32,6 +36,7 @@ func NewPool(cfg *config.Config) (*pgxpool.Pool, error) {
 	defer cancel()
 
 	if err := pool.Ping(ctx); err != nil {
+		pool.Close() // prevent background health-check goroutine from leaking
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 

@@ -52,9 +52,13 @@ func toBool(b *bool) pgtype.Bool {
 }
 
 func toNumeric(f float64) pgtype.Numeric {
+	// pgtype.Numeric.Scan accepts string/[]byte only (not float64 directly).
+	// Scan should never fail for a finite float64 produced by FormatFloat,
+	// but we log rather than silently discard the error for consistency.
 	n := pgtype.Numeric{}
-	// pgtype.Numeric.Scan accepts string/[]byte only (not float64 directly)
-	_ = n.Scan(strconv.FormatFloat(f, 'f', -1, 64))
+	if err := n.Scan(strconv.FormatFloat(f, 'f', -1, 64)); err != nil {
+		log.Printf("toNumeric: unexpected scan error for %v: %v", f, err)
+	}
 	return n
 }
 
@@ -63,7 +67,9 @@ func toNullNumeric(f *float64) pgtype.Numeric {
 		return pgtype.Numeric{}
 	}
 	n := pgtype.Numeric{}
-	_ = n.Scan(strconv.FormatFloat(*f, 'f', -1, 64))
+	if err := n.Scan(strconv.FormatFloat(*f, 'f', -1, 64)); err != nil {
+		log.Printf("toNullNumeric: unexpected scan error for %v: %v", *f, err)
+	}
 	return n
 }
 

@@ -148,13 +148,17 @@ func (s *Service) Logout(ctx context.Context, refreshToken string) error {
 }
 
 func (s *Service) generateAccessToken(userID, email string, roles, permissions []string) (string, error) {
+	// Capture once so exp and iat are derived from the same instant.
+	// Two separate time.Now() calls could produce iat > exp if a clock
+	// adjustment happened between them.
+	now := time.Now()
 	claims := jwt.MapClaims{
 		"user_id":     userID,
 		"email":       email,
 		"roles":       roles,
 		"permissions": permissions,
-		"exp":         time.Now().Add(time.Duration(s.cfg.JWT.ExpireHours) * time.Hour).Unix(),
-		"iat":         time.Now().Unix(),
+		"exp":         now.Add(time.Duration(s.cfg.JWT.ExpireHours) * time.Hour).Unix(),
+		"iat":         now.Unix(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
