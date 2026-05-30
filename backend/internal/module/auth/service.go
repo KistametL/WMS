@@ -78,8 +78,12 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 		return nil, err
 	}
 
+	expireHours, _ := strconv.Atoi(s.cfg.JWT.ExpireHours)
+
 	return &LoginResponse{
+		TokenType:    "Bearer",
 		AccessToken:  accessToken,
+		ExpiresIn:    expireHours * 3600, // แปลงชั่วโมง → วินาที
 		RefreshToken: refreshToken,
 		UserID:       user.ID.String(),
 		Email:        user.Email,
@@ -126,8 +130,12 @@ func (s *Service) RefreshToken(ctx context.Context, req RefreshRequest) (*Refres
 		return nil, err
 	}
 
+	expireHours, _ := strconv.Atoi(s.cfg.JWT.ExpireHours)
+
 	return &RefreshResponse{
+		TokenType:    "Bearer",
 		AccessToken:  accessToken,
+		ExpiresIn:    expireHours * 3600,
 		RefreshToken: newRefreshToken,
 	}, nil
 }
