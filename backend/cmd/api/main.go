@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -50,7 +51,10 @@ func main() {
 
 	// Protected routes — ต้องผ่าน RequireAuth ทุก request
 	protected := api.Group("")
-	protected.Use(middleware.RequireAuth(cfg))
+	protected.Use(
+		middleware.RequireAuth(cfg),
+		middleware.RequestTimeout(30*time.Second),
+	)
 	{
 		// GET /api/v1/me — ดูข้อมูล user ที่ login อยู่
 		// ใช้เป็น smoke test ว่า JWT middleware ทำงานถูกต้อง
