@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "backend/**"
+      - ".github/workflows/ci.yml"
+  push:
+    branches: [develop]
+    paths:
+      - "backend/**"
+      - ".github/workflows/ci.yml"
+
+# ถ้า push commit ใหม่เข้า branch เดิม ให้ cancel run เก่าทิ้ง
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Job 1: ตรวจ code quality — แยกออกมาเพื่อให้รู้ชัดว่า lint fail หรือ test fail
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: backend/go.sum
+
+      # golangci-lint คือ industry standard สำหรับ Go
+      # รวม 100+ linter: unused vars, unchecked errors, security issues ฯลฯ
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.12.2
+          working-directory: backend
+
+  # Job 2: Build + Test — รัน parallel กับ lint
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: backend/go.sum
+
+      - name: Build
+        working-directory: backend
+        run: go build ./...
+
+      # -race: ตรวจ race condition (goroutine access shared data พร้อมกัน)
+      # -coverprofile: เก็บ coverage data ไว้แสดงผล
+      - name: Test
+        working-directory: backend
+        run: go test -race -coverprofile=coverage.out ./...
+
+      # แสดง coverage % ของแต่ละ package ใน CI log
+      - name: Coverage report
+        working-directory: backend
+        run: go tool cover -func=coverage.out

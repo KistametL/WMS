@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WMS — Lesson 02: JWT Middleware & CI Best Practice</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      line-height: 1.7;
+      font-size: 16px;
+    }
+
+    .sidebar {
+      position: fixed;
+      top: 0; left: 0;
+      width: 260px; height: 100vh;
+      background: #1a1d27;
+      border-right: 1px solid #2d3148;
+      overflow-y: auto;
+      padding: 24px 0;
+      z-index: 100;
+    }
+
+    .sidebar .logo {
+      padding: 0 20px 20px;
+      border-bottom: 1px solid #2d3148;
+      margin-bottom: 16px;
+    }
+
+    .sidebar .logo span {
+      font-size: 13px;
+      font-weight: 700;
+      color: #818cf8;
+    }
+
+    .sidebar .logo p {
+      font-size: 11px;
+      color: #4b5563;
+      margin-top: 2px;
+    }
+
+    .sidebar h2 {
+      font-size: 11px;
+      font-weight: 600;
+      color: #4b5563;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      padding: 12px 20px 6px;
+    }
+
+    .sidebar a {
+      display: block;
+      padding: 7px 20px;
+      color: #9ca3af;
+      text-decoration: none;
+      font-size: 13px;
+      border-left: 3px solid transparent;
+      transition: all 0.15s;
+    }
+
+    .sidebar a:hover { color: #e2e8f0; background: #252837; }
+    .sidebar a.active { color: #818cf8; border-left-color: #818cf8; background: #1e2035; }
+    .sidebar a.sub { padding-left: 32px; font-size: 12px; color: #6b7280; }
+    .sidebar a.sub:hover { color: #cbd5e1; }
+
+    .sidebar .prev-lesson {
+      margin: 16px 20px 0;
+      padding: 10px 12px;
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 6px;
+      text-decoration: none;
+      display: block;
+    }
+
+    .sidebar .prev-lesson span {
+      font-size: 10px;
+      color: #4b5563;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      display: block;
+    }
+
+    .sidebar .prev-lesson p {
+      font-size: 12px;
+      color: #6b7280;
+      margin: 0;
+    }
+
+    .sidebar .prev-lesson:hover p { color: #9ca3af; }
+
+    .main {
+      margin-left: 260px;
+      max-width: 860px;
+      padding: 48px 48px 120px;
+    }
+
+    .hero {
+      margin-bottom: 56px;
+      padding-bottom: 32px;
+      border-bottom: 1px solid #2d3148;
+    }
+
+    .hero .badge {
+      display: inline-block;
+      background: #1e2035;
+      color: #818cf8;
+      border: 1px solid #3730a3;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 12px;
+      margin-bottom: 16px;
+      letter-spacing: 0.05em;
+    }
+
+    .hero h1 {
+      font-size: 36px;
+      font-weight: 700;
+      color: #f1f5f9;
+      margin-bottom: 12px;
+      line-height: 1.2;
+    }
+
+    .hero p { color: #94a3b8; font-size: 17px; max-width: 600px; }
+
+    .progress {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 24px;
+    }
+
+    .step-badge {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .step-badge.done  { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+    .step-badge.next  { background: #1e1b4b; color: #a5b4fc; border: 1px solid #3730a3; }
+
+    section { margin-bottom: 64px; scroll-margin-top: 32px; }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .section-num {
+      width: 36px; height: 36px;
+      background: #818cf8;
+      color: #fff;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 15px;
+      flex-shrink: 0;
+    }
+
+    h2 { font-size: 24px; font-weight: 700; color: #f1f5f9; }
+    h3 { font-size: 17px; font-weight: 600; color: #e2e8f0; margin: 28px 0 10px; }
+    h4 { font-size: 14px; font-weight: 600; color: #a5b4fc; margin: 20px 0 8px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    p { color: #94a3b8; margin-bottom: 12px; }
+
+    .why-box {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-left: 3px solid #818cf8;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin: 16px 0;
+    }
+
+    .why-box .label {
+      font-size: 11px; font-weight: 700; color: #818cf8;
+      text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px;
+    }
+
+    .why-box p { color: #cbd5e1; margin: 0; font-size: 14px; }
+
+    .warn-box {
+      background: #1c1407;
+      border: 1px solid #713f12;
+      border-left: 3px solid #f59e0b;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin: 16px 0;
+    }
+
+    .warn-box .label { font-size: 11px; font-weight: 700; color: #f59e0b; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+    .warn-box p { color: #fde68a; margin: 0; font-size: 14px; }
+
+    .info-box {
+      background: #0c1a2e;
+      border: 1px solid #1e3a5f;
+      border-left: 3px solid #38bdf8;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin: 16px 0;
+    }
+
+    .info-box .label { font-size: 11px; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+    .info-box p { color: #bae6fd; margin: 0; font-size: 14px; }
+
+    .code-block {
+      background: #0d1117;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      margin: 16px 0;
+      overflow: hidden;
+    }
+
+    .code-block .code-header {
+      background: #161b22;
+      padding: 8px 16px;
+      font-size: 12px;
+      color: #6b7280;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #2d3148;
+    }
+
+    .code-block .code-header .lang { color: #818cf8; font-weight: 600; font-size: 11px; }
+
+    .code-block pre {
+      padding: 20px;
+      overflow-x: auto;
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 13.5px;
+      line-height: 1.6;
+    }
+
+    .code-block code { color: #e2e8f0; }
+
+    .kw  { color: #c792ea; }  /* keyword: func, type, var */
+    .fn  { color: #82aaff; }  /* function name */
+    .str { color: #c3e88d; }  /* string */
+    .cmt { color: #546e7a; font-style: italic; }  /* comment */
+    .num { color: #f78c6c; }  /* number */
+    .typ { color: #ffcb6b; }  /* type name */
+    .pkg { color: #89ddff; }  /* package/import */
+    .op  { color: #89ddff; }  /* operator / punctuation */
+
+    .flow-diagram {
+      background: #0d1117;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      padding: 24px;
+      margin: 16px 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: #94a3b8;
+      line-height: 1.8;
+      overflow-x: auto;
+    }
+
+    .flow-diagram .highlight { color: #818cf8; font-weight: 600; }
+    .flow-diagram .green     { color: #4ade80; }
+    .flow-diagram .red       { color: #f87171; }
+    .flow-diagram .yellow    { color: #fbbf24; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+
+    th {
+      background: #1a1d27;
+      color: #818cf8;
+      padding: 10px 14px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 2px solid #2d3148;
+    }
+
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid #1e2235;
+      color: #cbd5e1;
+      vertical-align: top;
+    }
+
+    tr:hover td { background: #141624; }
+
+    td code, p code {
+      background: #1e2235;
+      color: #a5b4fc;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 13px;
+    }
+
+    .checklist { list-style: none; margin: 16px 0; }
+    .checklist li {
+      padding: 6px 0;
+      color: #94a3b8;
+      font-size: 14px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .checklist li::before {
+      content: '✓';
+      color: #4ade80;
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .checklist li.pending::before { content: '○'; color: #4b5563; }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 16px 0;
+    }
+
+    .card {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      padding: 16px 20px;
+    }
+
+    .card h4 { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+    .card p  { font-size: 13px; color: #6b7280; margin: 0; }
+
+    .card.green { border-top: 2px solid #4ade80; }
+    .card.green h4 { color: #4ade80; }
+    .card.red { border-top: 2px solid #f87171; }
+    .card.red h4 { color: #f87171; }
+    .card.blue { border-top: 2px solid #38bdf8; }
+    .card.blue h4 { color: #38bdf8; }
+    .card.purple { border-top: 2px solid #818cf8; }
+    .card.purple h4 { color: #818cf8; }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-right: 4px;
+    }
+
+    .tag.get    { background: #052e16; color: #4ade80; }
+    .tag.post   { background: #1c1a4e; color: #a5b4fc; }
+    .tag.delete { background: #2d1515; color: #f87171; }
+
+    .divider {
+      border: none;
+      border-top: 1px solid #1e2235;
+      margin: 32px 0;
+    }
+
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .main { margin-left: 0; padding: 24px 20px 80px; }
+      .two-col { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════ SIDEBAR -->
+<nav class="sidebar">
+  <div class="logo">
+    <span>WMS Project</span>
+    <p>Lesson 02 of ongoing</p>
+  </div>
+
+  <h2>Lesson 02</h2>
+  <a href="#jwt-overview">1. JWT คืออะไร</a>
+  <a href="#middleware-flow">2. Middleware Flow</a>
+  <a href="#require-auth">3. RequireAuth</a>
+  <a href="#require-permission">4. RequirePermission</a>
+  <a href="#require-role">5. RequireRole</a>
+  <a href="#helpers">6. Helper Functions</a>
+  <a href="#usage-pattern">7. Pattern การใช้งาน</a>
+  <a href="#test-api">8. ทดสอบ API</a>
+  <a href="#ci-overview">9. CI คืออะไร</a>
+  <a href="#ci-problems">10. ปัญหา CI เดิม</a>
+  <a href="#golangci-lint">11. golangci-lint</a>
+  <a href="#ci-final">12. CI ที่ได้</a>
+  <a href="#next">13. ขั้นตอนถัดไป</a>
+
+  <a href="lesson-01-infrastructure.html" class="prev-lesson">
+    <span>← บทก่อนหน้า</span>
+    <p>Lesson 01: Infrastructure</p>
+  </a>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════ MAIN -->
+<main class="main">
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="badge">LESSON 02</div>
+    <h1>JWT Middleware<br>& CI Best Practice</h1>
+    <p>ป้องกัน API ด้วย JWT authentication, RBAC permission checks,
+       และ upgrade CI pipeline ให้ได้มาตรฐาน production</p>
+
+    <div class="progress">
+      <span class="step-badge done">✓ Infrastructure</span>
+      <span class="step-badge done">✓ Database Schema</span>
+      <span class="step-badge done">✓ Auth Module (Login)</span>
+      <span class="step-badge done">✓ JWT Middleware</span>
+      <span class="step-badge done">✓ CI Pipeline</span>
+      <span class="step-badge next">→ Product Module</span>
+      <span class="step-badge next">→ Inventory Module</span>
+    </div>
+  </div>
+
+  <!-- ─────────────────────────────────────────── SECTION 1 -->
+  <section id="jwt-overview">
+    <div class="section-header">
+      <div class="section-num">1</div>
+      <h2>JWT คืออะไร และทำงานยังไง</h2>
+    </div>
+
+    <p>JWT (JSON Web Token) คือ token ที่ส่งไปพร้อมกับทุก request เพื่อบอกว่า "ฉันคือใคร และมีสิทธิ์อะไร"</p>
+
+    <div class="flow-diagram">
+<span class="highlight">Flow การ Login และใช้งาน API:</span>
+
+1. Client ส่ง email + password → POST /api/v1/auth/login
+2. Server ตรวจรหัสผ่าน → สร้าง JWT token ส่งกลับ
+3. Client เก็บ token ไว้
+4. Client ส่ง token ทุกครั้งที่เรียก API
+   → Header: Authorization: Bearer eyJhbGci...
+5. Server ตรวจ token → รู้ว่าใคร → อนุมัติหรือปฏิเสธ
+    </div>
+
+    <p>JWT แบ่งเป็น 3 ส่วน คั่นด้วยจุด <code>header.payload.signature</code></p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span>ตัวอย่าง JWT (decode แล้ว)</span>
+        <span class="lang">JSON</span>
+      </div>
+      <pre><code><span class="cmt">// Header — บอกว่าใช้ algorithm อะไร</span>
+{ <span class="str">"alg"</span>: <span class="str">"HS256"</span>, <span class="str">"typ"</span>: <span class="str">"JWT"</span> }
+
+<span class="cmt">// Payload — ข้อมูลที่เก็บไว้ใน token (ทุกคนอ่านได้!)</span>
+{
+  <span class="str">"user_id"</span>:     <span class="str">"773b1f73-0c91-4b47-..."</span>,
+  <span class="str">"email"</span>:       <span class="str">"admin@wms.com"</span>,
+  <span class="str">"roles"</span>:       [<span class="str">"super_admin"</span>],
+  <span class="str">"permissions"</span>: [<span class="str">"products.read"</span>, <span class="str">"orders.write"</span>],
+  <span class="str">"exp"</span>:         <span class="num">1779395488</span>,   <span class="cmt">// หมดอายุ</span>
+  <span class="str">"iat"</span>:         <span class="num">1779309088</span>    <span class="cmt">// สร้างเมื่อ</span>
+}
+
+<span class="cmt">// Signature — ใช้ตรวจว่า token ไม่ถูกแก้ไข</span>
+HMAC-SHA256(base64(header) + "." + base64(payload), JWT_SECRET)</code></pre>
+    </div>
+
+    <div class="warn-box">
+      <div class="label">⚠ สำคัญ</div>
+      <p>Payload ถูก Base64 encode ไว้ ไม่ใช่ encrypt — ใครก็ decode อ่านได้ อย่าเก็บข้อมูลลับใน JWT เด็ดขาด (เช่น password, credit card). สิ่งที่ปลอดภัยคือ signature ที่ certify ว่า token ไม่ถูกแก้ไข</p>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────── SECTION 2 -->
+  <section id="middleware-flow">
+    <div class="section-header">
+      <div class="section-num">2</div>
+      <h2>Middleware Flow</h2>
+    </div>
+
+    <p>Middleware คือ code ที่รันก่อน handler จริง — เหมือนด่านตรวจก่อนเข้าห้อง ถ้าไม่ผ่าน ตอบ error กลับทันที ไม่ให้เข้าถึง handler</p>
+
+    <div class="flow-diagram">
+<span class="highlight">Request lifecycle:</span>
+
+HTTP Request
+    │
+    ▼
+<span class="green">RequireAuth</span>        ← ตรวจ JWT token
+    │ ✓ valid
+    ▼
+<span class="green">RequirePermission</span>  ← ตรวจว่ามี permission นี้ไหม (optional)
+    │ ✓ has permission
+    ▼
+<span class="green">Handler</span>            ← logic จริงๆ
+    │
+    ▼
+HTTP Response
+
+
+ถ้าด่านไหนล้มเหลว → หยุดทันที ไม่ไปต่อ:
+
+<span class="red">RequireAuth</span> fail  → 401 Unauthorized
+<span class="red">RequirePermission</span> fail → 403 Forbidden
+    </div>
+
+    <div class="why-box">
+      <div class="label">ทำไมต้องแยกเป็น middleware แทนที่จะตรวจใน handler</div>
+      <p>ถ้าตรวจใน handler ทุกตัว — code ซ้ำ 50 จุด ลืมได้ทุกเมื่อ<br>
+      ถ้าเป็น middleware — ใส่ที่เดียว ครอบทุก route อัตโนมัติ ลืมไม่ได้</p>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────── SECTION 3 -->
+  <section id="require-auth">
+    <div class="section-header">
+      <div class="section-num">3</div>
+      <h2>RequireAuth — ตรวจ JWT Token</h2>
+    </div>
+
+    <p>Middleware ตัวแรก ทุก protected route ต้องผ่านตัวนี้ก่อนเสมอ</p>
+
+    <h3>สิ่งที่ตรวจ</h3>
+    <ul class="checklist">
+      <li>มี Authorization header ไหม</li>
+      <li>รูปแบบเป็น <code>Bearer &lt;token&gt;</code> ไหม</li>
+      <li>Signature ถูกต้องไหม (token ไม่ถูกแก้ไข)</li>
+      <li>Algorithm เป็น HS256 ไหม (ป้องกัน algorithm confusion attack)</li>
+      <li>Token ยังไม่หมดอายุไหม</li>
+    </ul>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span>internal/middleware/auth.go</span>
+        <span class="lang">GO</span>
+      </div>
+      <pre><code><span class="kw">func</span> <span class="fn">RequireAuth</span>(cfg *<span class="typ">config.Config</span>) <span class="typ">gin.HandlerFunc</span> {
+    <span class="kw">return func</span>(c *<span class="typ">gin.Context</span>) {
+        authHeader := c.<span class="fn">GetHeader</span>(<span class="str">"Authorization"</span>)
+        <span class="kw">if</span> authHeader == <span class="str">""</span> {
+            response.<span class="fn">Unauthorized</span>(c, <span class="str">"authorization header is required"</span>)
+            c.<span class="fn">Abort</span>()  <span class="cmt">// หยุด ไม่ไปต่อ</span>
+            <span class="kw">return</span>
+        }
+
+        parts := strings.<span class="fn">SplitN</span>(authHeader, <span class="str">" "</span>, <span class="num">2</span>)
+        <span class="kw">if</span> len(parts) != <span class="num">2</span> || !strings.<span class="fn">EqualFold</span>(parts[<span class="num">0</span>], <span class="str">"Bearer"</span>) {
+            response.<span class="fn">Unauthorized</span>(c, <span class="str">"format must be: Bearer &lt;token&gt;"</span>)
+            c.<span class="fn">Abort</span>()
+            <span class="kw">return</span>
+        }
+
+        token, err := jwt.<span class="fn">Parse</span>(parts[<span class="num">1</span>], <span class="kw">func</span>(t *<span class="typ">jwt.Token</span>) (<span class="kw">interface</span>{}, <span class="kw">error</span>) {
+            <span class="cmt">// ป้องกัน algorithm confusion attack</span>
+            <span class="cmt">// ถ้า attacker ส่ง alg: "none" มา ต้อง reject ทันที</span>
+            <span class="kw">if</span> _, ok := t.Method.(*<span class="typ">jwt.SigningMethodHMAC</span>); !ok {
+                <span class="kw">return nil</span>, jwt.ErrSignatureInvalid
+            }
+            <span class="kw">return</span> []<span class="kw">byte</span>(cfg.JWT.Secret), <span class="kw">nil</span>
+        }, jwt.<span class="fn">WithValidMethods</span>([]<span class="kw">string</span>{<span class="str">"HS256"</span>}))
+
+        <span class="kw">if</span> err != <span class="kw">nil</span> || !token.Valid {
+            response.<span class="fn">Unauthorized</span>(c, <span class="str">"invalid or expired token"</span>)
+            c.<span class="fn">Abort</span>()
+            <span class="kw">return</span>
+        }
+
+        claims := token.Claims.(<span class="typ">jwt.MapClaims</span>)
+        c.<span class="fn">Set</span>(<span class="str">"wms.user_id"</span>, claims[<span class="str">"user_id"</span>])
+        c.<span class="fn">Set</span>(<span class="str">"wms.roles"</span>, claims[<span class="str">"roles"</span>])
+        c.<span class="fn">Set</span>(<span class="str">"wms.permissions"</span>, claims[<span class="str">"permissions"</span>])
+
+        c.<span class="fn">Next</span>()  <span class="cmt">// ผ่าน ไปต่อ</span>
+    }
+}</code></pre>
+    </div>
+
+    <div class="info-box">
+      <div class="label">Context Key Prefix</div>
+      <p>ใช้ prefix <code>"wms."</code> เพราะ gin.Context ใช้ string เป็น key — ถ้าไม่มี prefix อาจชนกับ key ของ library อื่นที่ใช้ใน middleware ตัวเดียวกัน</p>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────── SECTION 4 -->
+  <section id="require-permission">
+    <div class="section-header">
+      <div class="section-num">4</div>
+      <h2>RequirePermission — ตรวจสิทธิ์ละเอียด</h2>
+    </div>
+
+    <p>ใช้เมื่อ route ต้องการ permission เฉพาะ เช่น <code>products.read</code>, <code>orders.write</code></p>
+
+    <h3>Permission ที่มีในระบบ (12 อัน)</h3>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Permission</th>
+          <th>ความหมาย</th>
+          <th>ใครมี</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>products.read</code></td><td>ดูสินค้า</td><td>ทุก role ยกเว้น viewer</td></tr>
+        <tr><td><code>products.write</code></td><td>เพิ่ม/แก้ไขสินค้า</td><td>admin, manager</td></tr>
+        <tr><td><code>inventory.read</code></td><td>ดู stock</td><td>ทุก role</td></tr>
+        <tr><td><code>inventory.write</code></td><td>รับ/จ่ายสินค้า</td><td>warehouse_staff+</td></tr>
+        <tr><td><code>orders.read</code></td><td>ดู order</td><td>ทุก role</td></tr>
+        <tr><td><code>orders.write</code></td><td>สร้าง/แก้ order</td><td>fulfillment_staff+</td></tr>
+        <tr><td><code>orders.fulfill</code></td><td>จัดส่ง/ปิด order</td><td>fulfillment_staff+</td></tr>
+        <tr><td><code>reports.view</code></td><td>ดู report</td><td>manager+</td></tr>
+        <tr><td><code>settings.manage</code></td><td>ตั้งค่าระบบ</td><td>admin+</td></tr>
+        <tr><td><code>users.manage</code></td><td>จัดการ user</td><td>admin+</td></tr>
+        <tr><td><code>channels.manage</code></td><td>ตั้งค่า Shopee/Lazada</td><td>admin+</td></tr>
+        <tr><td><code>pos.operate</code></td><td>ใช้ POS</td><td>fulfillment_staff+</td></tr>
+      </tbody>
+    </table>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span>internal/middleware/auth.go</span>
+        <span class="lang">GO</span>
+      </div>
+      <pre><code><span class="cmt">// ผ่านถ้า user มี permission อย่างน้อย 1 อัน จาก list ที่กำหนด</span>
+<span class="kw">func</span> <span class="fn">RequirePermission</span>(permissions ...<span class="kw">string</span>) <span class="typ">gin.HandlerFunc</span> {
+    <span class="kw">return func</span>(c *<span class="typ">gin.Context</span>) {
+        userPerms := <span class="fn">getStringSlice</span>(c, <span class="str">"wms.permissions"</span>)
+
+        <span class="kw">for</span> _, required := <span class="kw">range</span> permissions {
+            <span class="kw">for</span> _, has := <span class="kw">range</span> userPerms {
+                <span class="kw">if</span> has == required {
+                    c.<span class="fn">Next</span>()  <span class="cmt">// พบ permission → ผ่าน</span>
+                    <span class="kw">return</span>
+                }
+            }
+        }
+
+        response.<span class="fn">Forbidden</span>(c, <span class="str">"you do not have permission to perform this action"</span>)
+        c.<span class="fn">Abort</span>()
+    }
+}</code></pre>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────── SECTION 5 -->
+  <section id="require-role">
+    <div class="section-header">
+      <div class="section-num">5</div>
+      <h2>RequireRole — ตรวจ Role</h2>
+    </div>
+
+    <p>ใช้เมื่อ route ต้องการ role เฉพาะ เช่น admin-only settings page</p>
+
+    <h3>5 Roles ในระบบ</h3>
+
+    <div class="two-col">
+      <div class="card purple">
+        <h4>super_admin</h4>
+        <p>เจ้าของระบบ ทำได้ทุกอย่าง ไม่มีข้อยกเว้น</p>
+      </div>
+      <div class="card blue">
+        <h4>admin</h4>
+        <p>ผู้จัดการระบบ จัดการ user และ settings ได้ ยกเว้น system-level</p>
+      </div>
+      <div class="card green">
+        <h4>manager</h4>
+        <p>ดู report ได้ทุกอย่าง แก้ไขข้อมูลหลักได้ แต่ไม่จัดการ user</p>
+      </div>
+      <div class="card green">
+        <h4>warehouse_staff</h4>
+        <p>รับของเข้า จ่ายของออก ดู stock ดู order ไม่จัดการ settings</p>
+      </div>
+      <div class="card green">
+        <h4>fulfillment_staff</h4>
+        <p>จัดส่ง order ใช้ POS รับของได้ แต่ไม่แก้ข้อมูลสินค้า</p>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span>internal/middleware/auth.go</span>
+        <span class="lang">GO</span>
+      </div>
+      <pre><code><span class="kw">func</span> <span class="fn">RequireRole</span>(roles ...<span class="kw">string</span>) <span class="typ">gin.HandlerFunc</span> {
+    <span class="kw">return func</span>(c *<span class="typ">gin.Context</span>) {
+        userRoles := <span class="fn">getStringSlice</span>(c, <span class="str">"wms.roles"</span>)
+
+        <span class="kw">for</span> _, required := <span class="kw">range</span> roles {
+            <span class="kw">for</span> _, has := <span class="kw">range</span> userRoles {
+                <span class="kw">if</span> has == required {
+                    c.<span class="fn">Next</span>()
+                    <span class="kw">return</span>
+                }
+            }
+        }
+
+        response.<span class="fn">Forbidden</span>(c, <span class="str">"insufficient role to access this resource"</span>)
+        c.<span class="fn">Abort</span>()
+    }
+}</code></pre>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────── SECTION 6 -->
+  <section id="helpers">
+    <div class="section-header">
+      <div class="section-num">6</div>
+      <h2>Helper Functions</h2>
+    </div>
+
+    <p>ดึงข้อมูล user จาก context ใน handler โดยไม่ต้อง type-cast เอง</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span>ใช้ใน handler ไหนก็ได้</span>
+        <span class="lang">GO</span>
+      </div>
+      <pre><code>userID  := middleware.<span class="fn">GetUserID</span>(c)      <span class="cmt">// "773b1f73-..."</span>
+email   := middleware.<span class="fn">GetEmail</span>(c)       <span class="cmt">// "admin@wms.com"</span>
+roles   := middleware.<span class="fn">GetRoles</span>(c)       <span class="cmt">// ["super_admin"]</span>
+perms   := middleware.<span class="fn">GetPermissions</span>(c) <span class="cmt">// ["products.read", ...]</span>
+
+<span class="cmt">// ตรวจ permission ภายใน handler (ไม่ block route)</span>
+<span class="kw">if</span> middleware.<span class="fn">HasPermission</span>(c, <span class="str">"reports.view"</span>) {
+    <span class="cmt">// แสดงข้อมูลพิเศษ</span>
+}</code></pre>
+    </div>
+
+    <div class="info-box">
+      <div class="label">ทำไมต้องมี Helper?</div>
+      <p>JWT decode arrays เป็น <code>[]interface{}</code> ไม่ใช่ <code>[]string</code> — helper ทำการแปลงให้อัตโนมัติ ถ้าไม่มี helper ต้อง type-cast เองทุก handler ซึ่งเสี่ยง panic ถ้าทำผิด</p>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────── SECTION 7 -->
+  <section id="usage-pattern">
+    <div class="section-header">
+      <div class="section-num">7</div>
+      <h2>Pattern การใช้งานใน main.go</h2>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span>cmd/api/main.go — วิธีลงทะเบียน routes</span>
+        <span class="lang">GO</span>
+      </div>
+      <pre><code>api := r.<span class="fn">Group</span>(<span class="str">"/api/v1"</span>)
+
+<span class="cmt">// ── Public routes (ไม่ต้อง login) ──────────────</span>
+authHandler.<span class="fn">RegisterRoutes</span>(api)      <span class="cmt">// POST /auth/login, /auth/refresh</span>
+
+<span class="cmt">// ── Protected routes (ต้อง login ทุก request) ──</span>
+protected := api.<span class="fn">Group</span>(<span class="str">""</span>)
+protected.<span class="fn">Use</span>(middleware.<span class="fn">RequireAuth</span>(cfg))
+{
+    <span class="cmt">// ทุก role เข้าได้ (แค่ต้อง login)</span>
+    protected.<span class="fn">GET</span>(<span class="str">"/me"</span>, handler.Me)
+
+    <span class="cmt">// ต้องมี permission products.read</span>
+    protected.<span class="fn">GET</span>(<span class="str">"/products"</span>,
+        middleware.<span class="fn">RequirePermission</span>(<span class="str">"products.read"</span>),
+        productHandler.List)
+
+    <span class="cmt">// ต้องมี permission products.write</span>
+    protected.<span class="fn">POST</span>(<span class="str">"/products"</span>,
+        middleware.<span class="fn">RequirePermission</span>(<span class="str">"products.write"</span>),
+        productHandler.Create)
+
+    <span class="cmt">// ── Admin-only area ─────────────────────────</span>
+    admin := protected.<span class="fn">Group</span>(<span class="str">"/admin"</span>)
+    admin.<span class="fn">Use</span>(middleware.<span class="fn">RequireRole</span>(<span class="str">"super_admin"</span>, <span class="str">"admin"</span>))
+    {
+        admin.<span class="fn">GET</span>(<span class="str">"/users"</span>, userHandler.List)
+        admin.<span class="fn">POST</span>(<span class="str">"/users"</span>, userHandler.Create)
+    }
+}</code></pre>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────── SECTION 8 -->
+  <section id="test-api">
+    <div class="section-header">
+      <div class="section-num">8</div>
+      <h2>ทดสอบ API ด้วย curl</h2>
+    </div>
+
+    <h3>Test 1 — เรียกโดยไม่มี token (ต้องได้ 401)</h3>
+    <div class="code-block">
+      <div class="code-header"><span>Terminal</span><span class="lang">BASH</span></div>
+      <pre><code>curl http://localhost:8000/api/v1/me
+
+<span class="cmt"># Response: 401</span>
+{ <span class="str">"success"</span>: <span class="kw">false</span>, <span class="str">"error"</span>: <span class="str">"authorization header is required"</span> }</code></pre>
+    </div>
+
+    <h3>Test 2 — Login เพื่อรับ token</h3>
+    <div class="code-block">
+      <div class="code-header"><span>Terminal</span><span class="lang">BASH</span></div>
+      <pre><code>curl -s -X POST http://localhost:8000/api/v1/auth/login \
+  -H <span class="str">"Content-Type: application/json"</span> \
+  -d <span class="str">'{"email":"admin@wms.com","password":"Admin@123456"}'</span>
+
+<span class="cmt"># Response: 200 — เก็บ access_token ไว้ใช้</span>
+{
+  <span class="str">"success"</span>: <span class="kw">true</span>,
+  <span class="str">"data"</span>: {
+    <span class="str">"access_token"</span>:  <span class="str">"eyJhbGci..."</span>,
+    <span class="str">"refresh_token"</span>: <span class="str">"cRhu9IWS..."</span>,
+    <span class="str">"roles"</span>: [<span class="str">"super_admin"</span>]
+  }
+}</code></pre>
+    </div>
+
+    <h3>Test 3 — เรียก /me ด้วย token ที่ได้ (ต้องได้ 200)</h3>
+    <div class="code-block">
+      <div class="code-header"><span>Terminal</span><span class="lang">BASH</span></div>
+      <pre><code>TOKEN=<span class="str">"eyJhbGci..."</span>
+
+curl http://localhost:8000/api/v1/me \
+  -H <span class="str">"Authorization: Bearer $TOKEN"</span>
+
+<span class="cmt"># Response: 200</span>
+{
+  <span class="str">"success"</span>: <span class="kw">true</span>,
+  <span class="str">"data"</span>: {
+    <span class="str">"user_id"</span>:     <span class="str">"773b1f73-..."</span>,
+    <span class="str">"email"</span>:       <span class="str">"admin@wms.com"</span>,
+    <span class="str">"roles"</span>:       [<span class="str">"super_admin"</span>],
+    <span class="str">"permissions"</span>: [<span class="str">"products.read"</span>, ...]
+  }
+}</code></pre>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ─────────────────────────────────────────── SECTION 9 -->
+  <section id="ci-overview">
+    <div class="section-header">
+      <div class="section-num">9</div>
+      <h2>CI คืออะไร และทำไมต้องมี</h2>
+    </div>
+
+    <p>CI (Continuous Integration) คือระบบที่รัน test อัตโนมัติทุกครั้งที่ push code — ป้องกันไม่ให้ code เสียหายเข้า main branch</p>
+
+    <div class="flow-diagram">
+<span class="highlight">ถ้าไม่มี CI:</span>
+
+push code → merge → deploy → <span class="red">bug ใน production</span> ← ค้นหายาก แก้เร่งด่วน เสียเวลา
+
+
+<span class="highlight">ถ้ามี CI:</span>
+
+push code → CI รัน test → <span class="red">fail → แจ้ง dev</span>
+                        ↓
+                     <span class="green">pass → merge ได้</span> → deploy ปลอดภัย
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────── SECTION 10 -->
+  <section id="ci-problems">
+    <div class="section-header">
+      <div class="section-num">10</div>
+      <h2>ปัญหา CI เดิมและสิ่งที่แก้</h2>
+    </div>
+
+    <table>
+      <thead>
+        <tr><th>CI เดิม</th><th>ปัญหา</th><th>แก้เป็น</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>go vet</code></td>
+          <td>ตรวจแค่ syntax พื้นฐาน ไม่จับ error ที่ลืม check, security hole</td>
+          <td><code>golangci-lint</code> (100+ linters)</td>
+        </tr>
+        <tr>
+          <td>job เดียว sequential</td>
+          <td>lint fail → ไม่รู้ว่า test ผ่านหรือเปล่า</td>
+          <td>2 jobs parallel (lint + test)</td>
+        </tr>
+        <tr>
+          <td><code>go test ./...</code></td>
+          <td>ไม่จับ race condition (goroutine bug)</td>
+          <td><code>go test -race ./...</code></td>
+        </tr>
+        <tr>
+          <td>trigger ทุก file</td>
+          <td>แก้ docs/ ก็เปลือง CI minutes ฟรี</td>
+          <td><code>paths: backend/**</code></td>
+        </tr>
+        <tr>
+          <td>ไม่มี concurrency</td>
+          <td>push 3 ครั้ง = CI 3 อันทำงานซ้อนกัน</td>
+          <td><code>cancel-in-progress: true</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ─────────────────────────────────────────── SECTION 11 -->
+  <section id="golangci-lint">
+    <div class="section-header">
+      <div class="section-num">11</div>
+      <h2>golangci-lint คืออะไร</h2>
+    </div>
+
+    <p>เครื่องมือมาตรฐาน Go ที่รวม linter หลายตัวไว้ด้วยกัน รันครั้งเดียวตรวจหลายอย่างพร้อมกัน</p>
+
+    <h3>Linters ที่เปิดไว้ในโปรเจคนี้</h3>
+
+    <table>
+      <thead>
+        <tr><th>Linter</th><th>จับอะไร</th><th>ตัวอย่าง bug</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>errcheck</code></td>
+          <td>ลืม check error return</td>
+          <td><code>os.Remove(file)</code> โดยไม่ check err</td>
+        </tr>
+        <tr>
+          <td><code>staticcheck</code></td>
+          <td>Advanced analysis (รวม gosimple)</td>
+          <td>ใช้ loop copy แทน <code>copy()</code>, dead code</td>
+        </tr>
+        <tr>
+          <td><code>govet</code></td>
+          <td>Suspicious constructs</td>
+          <td>printf format ไม่ตรงกับ argument</td>
+        </tr>
+        <tr>
+          <td><code>unused</code></td>
+          <td>Code ที่ไม่ถูกใช้</td>
+          <td>function ที่ declare แต่ไม่เรียก</td>
+        </tr>
+        <tr>
+          <td><code>gosec</code></td>
+          <td>Security issues</td>
+          <td>Hardcoded credentials, SQL injection risk</td>
+        </tr>
+        <tr>
+          <td><code>gofmt / goimports</code></td>
+          <td>Format + import grouping</td>
+          <td>Import ไม่จัดกลุ่ม stdlib vs third-party</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span>backend/.golangci.yml</span>
+        <span class="lang">YAML</span>
+      </div>
+      <pre><code>version: <span class="str">"2"</span>
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck    <span class="cmt"># รวม gosimple แล้วใน v2</span>
+    - unused
+    - gosec
+
+  settings:
+    gosec:
+      excludes:
+        - G114       <span class="cmt"># timeout จัดการใน app code เอง</span>
+
+  exclusions:
+    paths:
+      - internal/database/generated  <span class="cmt"># sqlc generated — ไม่ตรวจ</span>
+
+formatters:
+  enable:
+    - gofmt
+    - goimports</code></pre>
+    </div>
+
+    <div class="warn-box">
+      <div class="label">⚠ golangci-lint v1 vs v2</div>
+      <p>ใช้ <code>golangci-lint-action@v7</code> เพื่อรองรับ v2 (v6 รองรับแค่ v1)<br>
+      Pin version ตรงๆ เสมอ: <code>version: v2.12.2</code> อย่าใช้ <code>latest</code> เพราะ action อาจ resolve ผิด version</p>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────── SECTION 12 -->
+  <section id="ci-final">
+    <div class="section-header">
+      <div class="section-num">12</div>
+      <h2>CI Pipeline สุดท้าย</h2>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span>.github/workflows/ci.yml</span>
+        <span class="lang">YAML</span>
+      </div>
+      <pre><code>name: CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - <span class="str">"backend/**"</span>         <span class="cmt"># ✓ รันแค่ตอน backend เปลี่ยน</span>
+      - <span class="str">".github/workflows/ci.yml"</span>
+  push:
+    branches: [develop]
+    paths:
+      - <span class="str">"backend/**"</span>
+      - <span class="str">".github/workflows/ci.yml"</span>
+
+<span class="cmt"># push ใหม่มา → cancel run เก่าทิ้ง</span>
+concurrency:
+  group: ci-<span class="op">${{</span> github.ref <span class="op">}}</span>
+  cancel-in-progress: <span class="kw">true</span>
+
+jobs:
+  <span class="cmt"># รัน parallel — รู้ชัดว่า lint fail หรือ test fail</span>
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: <span class="str">"1.25"</span>
+          cache-dependency-path: backend/go.sum
+      - uses: golangci/golangci-lint-action@v7  <span class="cmt"># v7 รองรับ lint v2</span>
+        with:
+          version: v2.12.2                      <span class="cmt"># pin ตรงๆ</span>
+          working-directory: backend
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: <span class="str">"1.25"</span>
+          cache-dependency-path: backend/go.sum
+      - name: Build
+        working-directory: backend
+        run: go build ./...
+      - name: Test
+        working-directory: backend
+        run: go test -race -coverprofile=coverage.out ./...
+      - name: Coverage report
+        working-directory: backend
+        run: go tool cover -func=coverage.out</code></pre>
+    </div>
+
+    <h3>ผลที่ได้</h3>
+    <ul class="checklist">
+      <li>lint + test รัน parallel ประหยัดเวลา</li>
+      <li>จับ error ที่ go vet ตรวจไม่เจอ</li>
+      <li>จับ race condition ด้วย -race flag</li>
+      <li>เห็น test coverage % ทุก push</li>
+      <li>ไม่เปลืองเวลาตอนแก้แค่ docs</li>
+      <li>push เร็วๆ หลายครั้ง → cancel อันเก่า รันแค่อันล่าสุด</li>
+    </ul>
+  </section>
+
+  <!-- ─────────────────────────────────────────── SECTION 13 -->
+  <section id="next">
+    <div class="section-header">
+      <div class="section-num">13</div>
+      <h2>ขั้นตอนถัดไป</h2>
+    </div>
+
+    <p>ตอนนี้ระบบ auth และ CI พร้อมแล้ว ขั้นตอนถัดไปตาม priority:</p>
+
+    <table>
+      <thead>
+        <tr><th>#</th><th>Module</th><th>ทำอะไร</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>1</strong></td>
+          <td>Product Module</td>
+          <td>CRUD สินค้า, SKU, barcode generation, ดึงรูปภาพ</td>
+        </tr>
+        <tr>
+          <td><strong>2</strong></td>
+          <td>Inventory Module</td>
+          <td>รับของเข้า, จ่ายออก, stock movement log, stock reservation</td>
+        </tr>
+        <tr>
+          <td><strong>3</strong></td>
+          <td>Order Module</td>
+          <td>รับ order จาก Shopee, update status, COD tracking</td>
+        </tr>
+        <tr>
+          <td><strong>4</strong></td>
+          <td>Next.js Frontend</td>
+          <td>Dashboard, สินค้า, stock, order management UI</td>
+        </tr>
+        <tr>
+          <td><strong>5</strong></td>
+          <td>Shopee API</td>
+          <td>OAuth, sync สินค้า, pull order อัตโนมัติ</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span>เริ่ม feature ใหม่ทุกครั้ง — สร้าง branch ก่อน</span>
+        <span class="lang">BASH</span>
+      </div>
+      <pre><code><span class="cmt"># บน Mac</span>
+git checkout develop
+git pull origin develop
+git checkout -b feature/product-module
+
+<span class="cmt"># เขียนโค้ด → commit → push → open PR → CI ผ่าน → merge</span></code></pre>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  // Active sidebar link on scroll
+  const sections = document.querySelectorAll('section[id]');
+  const links    = document.querySelectorAll('.sidebar a[href^="#"]');
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        links.forEach(a => a.classList.remove('active'));
+        const active = document.querySelector(`.sidebar a[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-30% 0px -60% 0px' });
+
+  sections.forEach(s => observer.observe(s));
+</script>
+
+</body>
+</html>

@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
-	"strconv"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/KistametL/WMS/backend/internal/config"
 	db "github.com/KistametL/WMS/backend/internal/database/generated"
+	"github.com/KistametL/WMS/backend/internal/pgutil"
 )
 
 var (
@@ -66,9 +66,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 	}
 
 	permNames := make([]string, len(permissions))
-	for i, p := range permissions {
-		permNames[i] = p
-	}
+	copy(permNames, permissions)
 
 	accessToken, err := s.generateAccessToken(user.ID.String(), user.Email, roleNames, permNames)
 	if err != nil {
@@ -81,7 +79,9 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 	}
 
 	return &LoginResponse{
+		TokenType:    "Bearer",
 		AccessToken:  accessToken,
+		ExpiresIn:    s.cfg.JWT.ExpireHours * 3600, // hours → seconds
 		RefreshToken: refreshToken,
 		UserID:       user.ID.String(),
 		Email:        user.Email,
@@ -108,17 +108,22 @@ func (s *Service) RefreshToken(ctx context.Context, req RefreshRequest) (*Refres
 		return nil, err
 	}
 
-	roles, _ := s.queries.GetUserRoles(ctx, user.ID)
-	permissions, _ := s.queries.GetUserPermissions(ctx, user.ID)
+	roles, err := s.queries.GetUserRoles(ctx, user.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	permissions, err := s.queries.GetUserPermissions(ctx, user.ID)
+	if err != nil {
+		return nil, err
+	}
 
 	roleNames := make([]string, len(roles))
 	for i, r := range roles {
 		roleNames[i] = r.Name
 	}
 	permNames := make([]string, len(permissions))
-	for i, p := range permissions {
-		permNames[i] = p
-	}
+	copy(permNames, permissions)
 
 	accessToken, err := s.generateAccessToken(user.ID.String(), user.Email, roleNames, permNames)
 	if err != nil {
@@ -131,7 +136,9 @@ func (s *Service) RefreshToken(ctx context.Context, req RefreshRequest) (*Refres
 	}
 
 	return &RefreshResponse{
+		TokenType:    "Bearer",
 		AccessToken:  accessToken,
+		ExpiresIn:    s.cfg.JWT.ExpireHours * 3600, // hours → seconds
 		RefreshToken: newRefreshToken,
 	}, nil
 }
@@ -141,15 +148,17 @@ func (s *Service) Logout(ctx context.Context, refreshToken string) error {
 }
 
 func (s *Service) generateAccessToken(userID, email string, roles, permissions []string) (string, error) {
-	expireHours, _ := strconv.Atoi(s.cfg.JWT.ExpireHours)
-
+	// Capture once so exp and iat are derived from the same instant.
+	// Two separate time.Now() calls could produce iat > exp if a clock
+	// adjustment happened between them.
+	now := time.Now()
 	claims := jwt.MapClaims{
 		"user_id":     userID,
 		"email":       email,
 		"roles":       roles,
 		"permissions": permissions,
-		"exp":         time.Now().Add(time.Duration(expireHours) * time.Hour).Unix(),
-		"iat":         time.Now().Unix(),
+		"exp":         now.Add(time.Duration(s.cfg.JWT.ExpireHours) * time.Hour).Unix(),
+		"iat":         now.Unix(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -157,15 +166,13 @@ func (s *Service) generateAccessToken(userID, email string, roles, permissions [
 }
 
 func (s *Service) createRefreshToken(ctx context.Context, userID string) (string, error) {
-	expireDays, _ := strconv.Atoi(s.cfg.JWT.RefreshExpireDays)
-
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
 		return "", err
 	}
 	plainToken := base64.URLEncoding.EncodeToString(raw)
 
-	pgUserID, err := parseUUID(userID)
+	pgUserID, err := pgutil.ParseUUID(userID)
 	if err != nil {
 		return "", err
 	}
@@ -173,7 +180,7 @@ func (s *Service) createRefreshToken(ctx context.Context, userID string) (string
 	_, err = s.queries.CreateRefreshToken(ctx, db.CreateRefreshTokenParams{
 		UserID:    pgUserID,
 		TokenHash: hashToken(plainToken),
-		ExpiresAt: pgTimestamp(time.Now().Add(time.Duration(expireDays) * 24 * time.Hour)),
+		ExpiresAt: pgTimestamp(time.Now().Add(time.Duration(s.cfg.JWT.RefreshExpireDays) * 24 * time.Hour)),
 	})
 	if err != nil {
 		return "", err
