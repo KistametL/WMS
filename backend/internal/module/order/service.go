@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -45,7 +44,7 @@ func NewService(pool *pgxpool.Pool) *Service {
 //
 // Flow:
 //  1. Validate all SKUs exist and are active (read-only, outside TX)
-//  2. Calculate subtotal/total
+//  2. Calculate subtotal / total
 //  3. BEGIN TX:
 //     a. nextval(order_number_seq) → unique order number
 //     b. INSERT order
@@ -195,7 +194,7 @@ func (s *Service) GetOrder(ctx context.Context, id string) (*OrderDetailResponse
 // ── List ──────────────────────────────────────────────────────────
 
 func (s *Service) ListOrders(ctx context.Context, q ListOrdersQuery) (*ListResponse[OrderResponse], error) {
-	page, limit, offset := normalizePagination(q.Page, q.Limit)
+	page, limit, offset := pgutil.NormalizePagination(q.Page, q.Limit)
 
 	countParams := db.CountOrdersParams{
 		Status:  optText(q.Status),
@@ -212,7 +211,7 @@ func (s *Service) ListOrders(ctx context.Context, q ListOrdersQuery) (*ListRespo
 	}
 
 	// Safe: limit ≤ 100, offset = (page-1)*limit — fits int32
-	offset32 := int32(offset) //nolint:gosec // G115: bounded by normalizePagination
+	offset32 := int32(offset) //nolint:gosec // G115: bounded by NormalizePagination
 	limit32 := int32(limit)   //nolint:gosec // G115: capped at 100 above
 
 	rows, err := s.queries.ListOrders(ctx, db.ListOrdersParams{
@@ -243,6 +242,7 @@ func (s *Service) ListOrders(ctx context.Context, q ListOrdersQuery) (*ListRespo
 // ── Update Info ───────────────────────────────────────────────────
 
 // UpdateOrder แก้ไข customer/shipping/note ได้เฉพาะ pending หรือ confirmed
+// total ถูก recalculate อัตโนมัติใน SQL เมื่อ shipping_cost หรือ discount_total เปลี่ยน
 func (s *Service) UpdateOrder(ctx context.Context, id string, req UpdateOrderRequest) (*OrderResponse, error) {
 	pgID, err := pgutil.ParseUUID(id)
 	if err != nil {
@@ -288,9 +288,11 @@ func (s *Service) UpdateOrder(ctx context.Context, id string, req UpdateOrderReq
 // ── Status Transitions ────────────────────────────────────────────
 
 // UpdateStatus validates the state machine and applies the transition.
-// confirm  → reserve stock for all items
-// cancel   → unreserve stock if was in a reserved status
-// others   → simple status update + history record
+//
+//	confirmed → reserve stock (SELECT FOR UPDATE prevents double-reservation)
+//	shipped   → fulfill stock (deduct on_hand, create "fulfill" movements)
+//	cancelled → unreserve stock if was in reserved status
+//	others    → simple status update + history record
 func (s *Service) UpdateStatus(ctx context.Context, id string, req UpdateStatusRequest, userID string) (*OrderDetailResponse, error) {
 	pgID, err := pgutil.ParseUUID(id)
 	if err != nil {
@@ -318,16 +320,18 @@ func (s *Service) UpdateStatus(ctx context.Context, id string, req UpdateStatusR
 
 	switch req.Status {
 	case StatusCancelled:
-		return s.cancelWithLock(ctx, pgID, existing, req.Note, userPgID)
+		return s.cancelWithLock(ctx, pgID, existing.Status, req.Note, userPgID)
 	case StatusConfirmed:
-		return s.confirmWithStockReserve(ctx, pgID, existing, req.Note, userPgID)
+		return s.confirmWithStockReserve(ctx, pgID, existing.Status, req.Note, userPgID)
+	case StatusShipped:
+		return s.fulfillAndShip(ctx, pgID, existing.Status, req.Note, userPgID)
 	default:
 		return s.applyStatusUpdate(ctx, pgID, existing.Status, req.Status, req.Note, pgtype.Text{}, userPgID)
 	}
 }
 
 // CancelOrder is the dedicated cancel endpoint.
-// ใช้ตรงๆ จาก handler เมื่อ client เรียก DELETE /orders/:id/cancel
+// รองรับ reason field ที่ละเอียดกว่า UpdateStatus
 func (s *Service) CancelOrder(ctx context.Context, id string, req CancelOrderRequest, userID string) (*OrderDetailResponse, error) {
 	pgID, err := pgutil.ParseUUID(id)
 	if err != nil {
@@ -353,30 +357,227 @@ func (s *Service) CancelOrder(ctx context.Context, id string, req CancelOrderReq
 		}
 	}
 
-	return s.cancelWithLock(ctx, pgID, existing, req.Reason, userPgID)
+	return s.cancelWithLock(ctx, pgID, existing.Status, req.Reason, userPgID)
 }
 
-// cancelWithLock unreserves stock (when needed) then transitions to cancelled.
-//
-// Stock unreservation logic (RFC: within same TX as status update):
-//   - ถ้า current status อยู่ใน reservedStatuses → qty_reserved ลดลงตาม items
-//   - ถ้าไม่ → แค่อัพเดต status เฉยๆ
-func (s *Service) cancelWithLock(ctx context.Context, pgID pgtype.UUID, existing db.GetOrderByIDRow, reason *string, userPgID pgtype.UUID) (*OrderDetailResponse, error) {
-	needsUnreserve := reservedStatuses[existing.Status]
+// ── Internal Transaction Helpers ──────────────────────────────────
 
-	var items []db.ListOrderItemsRow
-	if needsUnreserve {
-		var err error
-		items, err = s.queries.ListOrderItems(ctx, pgID)
-		if err != nil {
-			return nil, err
-		}
-	}
+// confirmWithStockReserve reserves qty_reserved for every item then sets status = confirmed.
+//
+// Race condition protection (C1 fix):
+//   - GetOrderByIDForUpdate → SELECT FOR UPDATE on orders row ก่อนทำอะไร
+//   - ถ้า concurrent request confirm พร้อมกัน → อีก TX รอ lock → พอได้ lock
+//     พบว่า status ไม่ใช่ pending อีกแล้ว → return error ทันที
+//
+// C2 fix: ListOrderItems อยู่ภายใน TX แล้ว
+//
+// M4 fix: สร้าง stock_movement type "reserve" ทุก item
+func (s *Service) confirmWithStockReserve(ctx context.Context, pgID pgtype.UUID, fromStatus string, note *string, userPgID pgtype.UUID) (*OrderDetailResponse, error) {
+	orderUUID := pgutil.UUIDString(pgID)
 
 	txErr := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 
+		// ── Lock orders row (C1: ป้องกัน double-reservation) ──────────
+		locked, err := q.GetOrderByIDForUpdate(ctx, pgID)
+		if err != nil {
+			return fmt.Errorf("lock order row: %w", err)
+		}
+		if locked.Status != StatusPending {
+			return fmt.Errorf("%w: order is already %s (concurrent request?)", ErrInvalidTransition, locked.Status)
+		}
+
+		// ── List items ภายใน TX (C2 fix) ─────────────────────────────
+		items, err := q.ListOrderItems(ctx, pgID)
+		if err != nil {
+			return fmt.Errorf("list order items: %w", err)
+		}
+
+		// ── Reserve stock สำหรับทุก item ──────────────────────────────
+		for _, item := range items {
+			level, err := q.GetStockBySKUForUpdate(ctx, item.SkuID)
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return fmt.Errorf("%w: no stock record for sku %s — create a receive movement first",
+						ErrInsufficientStock, item.SkuCode)
+				}
+				return err
+			}
+			available := level.QtyOnHand - level.QtyReserved
+			if available < item.Quantity {
+				return fmt.Errorf("%w: sku %s needs %d but only %d available (on_hand=%d reserved=%d)",
+					ErrInsufficientStock, item.SkuCode, item.Quantity, available,
+					level.QtyOnHand, level.QtyReserved)
+			}
+
+			newReserved := level.QtyReserved + item.Quantity
+			if _, err := q.UpdateStockLevel(ctx, db.UpdateStockLevelParams{
+				SkuID:       item.SkuID,
+				QtyOnHand:   level.QtyOnHand,
+				QtyReserved: newReserved,
+			}); err != nil {
+				return fmt.Errorf("reserve stock for sku %s: %w", item.SkuCode, err)
+			}
+
+			// ── M4: บันทึก reserve movement เพื่อ audit trail ────────
+			if _, err := q.CreateStockMovement(ctx, db.CreateStockMovementParams{
+				SkuID:         item.SkuID,
+				MovementType:  "reserve",
+				QtyChange:     item.Quantity,
+				QtyBefore:     level.QtyReserved,
+				QtyAfter:      newReserved,
+				ReferenceType: pgtype.Text{String: "order", Valid: true},
+				ReferenceID:   pgtype.Text{String: orderUUID, Valid: true},
+				CreatedBy:     userPgID,
+			}); err != nil {
+				return fmt.Errorf("create reserve movement for sku %s: %w", item.SkuCode, err)
+			}
+		}
+
+		// ── Update status ──────────────────────────────────────────────
+		if _, err := q.UpdateOrderStatus(ctx, db.UpdateOrderStatusParams{
+			ID:     pgID,
+			Status: StatusConfirmed,
+		}); err != nil {
+			return fmt.Errorf("update order status: %w", err)
+		}
+
+		return q.CreateStatusHistory(ctx, db.CreateStatusHistoryParams{
+			OrderID:    pgID,
+			ToStatus:   StatusConfirmed,
+			FromStatus: pgtype.Text{String: fromStatus, Valid: true},
+			Note:       toText(note),
+			ChangedBy:  userPgID,
+		})
+	})
+	if txErr != nil {
+		return nil, txErr
+	}
+
+	return s.GetOrder(ctx, pgutil.UUIDString(pgID))
+}
+
+// fulfillAndShip deducts qty_on_hand and qty_reserved for every item
+// then transitions to shipped.  This is the "physical fulfillment" step.
+//
+// ทำไมต้องทำตอน shipped (ไม่ใช่ delivered):
+//   - "shipped" = สินค้าออกจาก warehouse แล้ว — stock ควรลดทันที
+//   - "delivered" = ลูกค้าได้รับแล้ว — ไม่ใช่จุดที่ stock เปลี่ยน
+//
+// M2 fix: จาก code review — เดิม stock ไม่ถูกตัดเลย
+// M4 fix: สร้าง stock_movement type "fulfill" ทุก item
+func (s *Service) fulfillAndShip(ctx context.Context, pgID pgtype.UUID, fromStatus string, note *string, userPgID pgtype.UUID) (*OrderDetailResponse, error) {
+	orderUUID := pgutil.UUIDString(pgID)
+
+	txErr := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
+		q := s.queries.WithTx(tx)
+
+		// ── Lock orders row ────────────────────────────────────────────
+		locked, err := q.GetOrderByIDForUpdate(ctx, pgID)
+		if err != nil {
+			return fmt.Errorf("lock order row: %w", err)
+		}
+		if locked.Status != fromStatus {
+			return fmt.Errorf("%w: order status changed to %s before ship could complete",
+				ErrInvalidTransition, locked.Status)
+		}
+
+		// ── List items ภายใน TX ────────────────────────────────────────
+		items, err := q.ListOrderItems(ctx, pgID)
+		if err != nil {
+			return fmt.Errorf("list order items: %w", err)
+		}
+
+		// ── Fulfill stock สำหรับทุก item ──────────────────────────────
+		for _, item := range items {
+			level, err := q.GetStockBySKUForUpdate(ctx, item.SkuID)
+			if err != nil {
+				return fmt.Errorf("lock stock for sku %s: %w", item.SkuCode, err)
+			}
+
+			newOnHand := level.QtyOnHand - item.Quantity
+			newReserved := level.QtyReserved - item.Quantity
+			if newOnHand < 0 {
+				newOnHand = 0
+			}
+			if newReserved < 0 {
+				newReserved = 0
+			}
+
+			if _, err := q.UpdateStockLevel(ctx, db.UpdateStockLevelParams{
+				SkuID:       item.SkuID,
+				QtyOnHand:   newOnHand,
+				QtyReserved: newReserved,
+			}); err != nil {
+				return fmt.Errorf("fulfill stock for sku %s: %w", item.SkuCode, err)
+			}
+
+			// ── M4: บันทึก fulfill movement ───────────────────────────
+			if _, err := q.CreateStockMovement(ctx, db.CreateStockMovementParams{
+				SkuID:         item.SkuID,
+				MovementType:  "fulfill",
+				QtyChange:     -item.Quantity,
+				QtyBefore:     level.QtyOnHand,
+				QtyAfter:      newOnHand,
+				ReferenceType: pgtype.Text{String: "order", Valid: true},
+				ReferenceID:   pgtype.Text{String: orderUUID, Valid: true},
+				CreatedBy:     userPgID,
+			}); err != nil {
+				return fmt.Errorf("create fulfill movement for sku %s: %w", item.SkuCode, err)
+			}
+		}
+
+		if _, err := q.UpdateOrderStatus(ctx, db.UpdateOrderStatusParams{
+			ID:     pgID,
+			Status: StatusShipped,
+		}); err != nil {
+			return fmt.Errorf("update order status: %w", err)
+		}
+
+		return q.CreateStatusHistory(ctx, db.CreateStatusHistoryParams{
+			OrderID:    pgID,
+			ToStatus:   StatusShipped,
+			FromStatus: pgtype.Text{String: fromStatus, Valid: true},
+			Note:       toText(note),
+			ChangedBy:  userPgID,
+		})
+	})
+	if txErr != nil {
+		return nil, txErr
+	}
+
+	return s.GetOrder(ctx, pgutil.UUIDString(pgID))
+}
+
+// cancelWithLock locks the order row, unreserves stock (when needed),
+// then transitions to cancelled.
+//
+// C1 fix: GetOrderByIDForUpdate ล็อก orders row ก่อน
+// C2 fix: ListOrderItems อยู่ภายใน TX
+// M4 fix: สร้าง stock_movement type "unreserve" ทุก item
+func (s *Service) cancelWithLock(ctx context.Context, pgID pgtype.UUID, fromStatus string, reason *string, userPgID pgtype.UUID) (*OrderDetailResponse, error) {
+	orderUUID := pgutil.UUIDString(pgID)
+	needsUnreserve := reservedStatuses[fromStatus]
+
+	txErr := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
+		q := s.queries.WithTx(tx)
+
+		// ── Lock orders row (C1 fix) ───────────────────────────────────
+		locked, err := q.GetOrderByIDForUpdate(ctx, pgID)
+		if err != nil {
+			return fmt.Errorf("lock order row: %w", err)
+		}
+		if locked.Status != fromStatus {
+			return fmt.Errorf("%w: order status changed to %s (concurrent request?)",
+				ErrInvalidTransition, locked.Status)
+		}
+
+		// ── Unreserve stock ภายใน TX (C2 fix) ────────────────────────
 		if needsUnreserve {
+			items, err := q.ListOrderItems(ctx, pgID)
+			if err != nil {
+				return fmt.Errorf("list order items: %w", err)
+			}
 			for _, item := range items {
 				level, err := q.GetStockBySKUForUpdate(ctx, item.SkuID)
 				if err != nil {
@@ -393,6 +594,21 @@ func (s *Service) cancelWithLock(ctx context.Context, pgID pgtype.UUID, existing
 				}); err != nil {
 					return fmt.Errorf("unreserve stock for sku %s: %w", item.SkuCode, err)
 				}
+
+				// ── M4: บันทึก unreserve movement ─────────────────────
+				if _, err := q.CreateStockMovement(ctx, db.CreateStockMovementParams{
+					SkuID:         item.SkuID,
+					MovementType:  "unreserve",
+					QtyChange:     -item.Quantity,
+					QtyBefore:     level.QtyReserved,
+					QtyAfter:      newReserved,
+					ReferenceType: pgtype.Text{String: "order", Valid: true},
+					ReferenceID:   pgtype.Text{String: orderUUID, Valid: true},
+					Note:          toText(reason),
+					CreatedBy:     userPgID,
+				}); err != nil {
+					return fmt.Errorf("create unreserve movement for sku %s: %w", item.SkuCode, err)
+				}
 			}
 		}
 
@@ -407,7 +623,7 @@ func (s *Service) cancelWithLock(ctx context.Context, pgID pgtype.UUID, existing
 		return q.CreateStatusHistory(ctx, db.CreateStatusHistoryParams{
 			OrderID:    pgID,
 			ToStatus:   StatusCancelled,
-			FromStatus: pgtype.Text{String: existing.Status, Valid: true},
+			FromStatus: pgtype.Text{String: fromStatus, Valid: true},
 			Note:       toText(reason),
 			ChangedBy:  userPgID,
 		})
@@ -416,71 +632,11 @@ func (s *Service) cancelWithLock(ctx context.Context, pgID pgtype.UUID, existing
 		return nil, txErr
 	}
 
-	return s.GetOrder(ctx, uuidString(pgID))
-}
-
-// confirmWithStockReserve reserves qty_reserved for every item then sets status = confirmed.
-//
-// ใช้ SELECT FOR UPDATE เพื่อป้องกัน race condition:
-// สถานการณ์: 2 orders confirm พร้อมกัน ใช้ SKU เดิม
-// FOR UPDATE lock rows ทีละ order → อีก order ต้องรอ → ไม่มี double-reservation
-func (s *Service) confirmWithStockReserve(ctx context.Context, pgID pgtype.UUID, existing db.GetOrderByIDRow, note *string, userPgID pgtype.UUID) (*OrderDetailResponse, error) {
-	items, err := s.queries.ListOrderItems(ctx, pgID)
-	if err != nil {
-		return nil, err
-	}
-
-	txErr := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
-		q := s.queries.WithTx(tx)
-
-		for _, item := range items {
-			level, err := q.GetStockBySKUForUpdate(ctx, item.SkuID)
-			if err != nil {
-				if errors.Is(err, pgx.ErrNoRows) {
-					return fmt.Errorf("%w: no stock record for sku %s — create a receive movement first",
-						ErrInsufficientStock, item.SkuCode)
-				}
-				return err
-			}
-			available := level.QtyOnHand - level.QtyReserved
-			if available < item.Quantity {
-				return fmt.Errorf("%w: sku %s needs %d but only %d available (on_hand=%d reserved=%d)",
-					ErrInsufficientStock, item.SkuCode, item.Quantity, available,
-					level.QtyOnHand, level.QtyReserved)
-			}
-			if _, err := q.UpdateStockLevel(ctx, db.UpdateStockLevelParams{
-				SkuID:       item.SkuID,
-				QtyOnHand:   level.QtyOnHand,
-				QtyReserved: level.QtyReserved + item.Quantity,
-			}); err != nil {
-				return fmt.Errorf("reserve stock for sku %s: %w", item.SkuCode, err)
-			}
-		}
-
-		if _, err := q.UpdateOrderStatus(ctx, db.UpdateOrderStatusParams{
-			ID:     pgID,
-			Status: StatusConfirmed,
-		}); err != nil {
-			return fmt.Errorf("update order status: %w", err)
-		}
-
-		return q.CreateStatusHistory(ctx, db.CreateStatusHistoryParams{
-			OrderID:    pgID,
-			ToStatus:   StatusConfirmed,
-			FromStatus: pgtype.Text{String: existing.Status, Valid: true},
-			Note:       toText(note),
-			ChangedBy:  userPgID,
-		})
-	})
-	if txErr != nil {
-		return nil, txErr
-	}
-
-	return s.GetOrder(ctx, uuidString(pgID))
+	return s.GetOrder(ctx, pgutil.UUIDString(pgID))
 }
 
 // applyStatusUpdate handles simple transitions with no stock side effects.
-// (picking, packing, ready_to_ship, shipped, delivered, completed)
+// (picking, packing, ready_to_ship, delivered, completed)
 func (s *Service) applyStatusUpdate(ctx context.Context, pgID pgtype.UUID, fromStatus, toStatus string, note *string, cancelReason pgtype.Text, userPgID pgtype.UUID) (*OrderDetailResponse, error) {
 	txErr := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
@@ -505,7 +661,7 @@ func (s *Service) applyStatusUpdate(ctx context.Context, pgID pgtype.UUID, fromS
 		return nil, txErr
 	}
 
-	return s.GetOrder(ctx, uuidString(pgID))
+	return s.GetOrder(ctx, pgutil.UUIDString(pgID))
 }
 
 // ── Order Number ──────────────────────────────────────────────────
@@ -513,12 +669,17 @@ func (s *Service) applyStatusUpdate(ctx context.Context, pgID pgtype.UUID, fromS
 // generateOrderNumber queries PostgreSQL sequence inside the transaction.
 // Format: ORD-YYYYMMDD-NNNNNN  e.g. ORD-20260531-000001
 // Sequence is global (not per-day reset) — keeps it simple and atomic.
+// วันที่มาจาก NOW() ใน DB เพื่อหลีกเลี่ยง timezone mismatch กับ app server.
 func generateOrderNumber(ctx context.Context, tx pgx.Tx) (string, error) {
 	var seq int64
-	if err := tx.QueryRow(ctx, `SELECT nextval('"order".order_number_seq')`).Scan(&seq); err != nil {
+	var dateStr string
+	err := tx.QueryRow(ctx,
+		`SELECT nextval('"order".order_number_seq'), TO_CHAR(NOW(), 'YYYYMMDD')`,
+	).Scan(&seq, &dateStr)
+	if err != nil {
 		return "", fmt.Errorf("generate order number: %w", err)
 	}
-	return fmt.Sprintf("ORD-%s-%06d", time.Now().Format("20060102"), seq), nil
+	return fmt.Sprintf("ORD-%s-%06d", dateStr, seq), nil
 }
 
 // ── Converters ────────────────────────────────────────────────────
@@ -538,7 +699,7 @@ func createOrderToDetail(o db.CreateOrderRow, items []db.CreateOrderItemRow) *Or
 
 func orderBaseFromCreate(o db.CreateOrderRow) OrderResponse {
 	resp := OrderResponse{
-		ID:            uuidString(o.ID),
+		ID:            pgutil.UUIDString(o.ID),
 		OrderNumber:   o.OrderNumber,
 		Channel:       o.Channel,
 		Status:        o.Status,
@@ -570,7 +731,7 @@ func orderBaseFromCreate(o db.CreateOrderRow) OrderResponse {
 		resp.Note = &o.Note.String
 	}
 	if o.CreatedBy.Valid {
-		s := uuidString(o.CreatedBy)
+		s := pgutil.UUIDString(o.CreatedBy)
 		resp.CreatedBy = &s
 	}
 	return resp
@@ -578,7 +739,7 @@ func orderBaseFromCreate(o db.CreateOrderRow) OrderResponse {
 
 func orderDetailToResponse(o db.GetOrderByIDRow, items []db.ListOrderItemsRow, history []db.OrderStatusHistory) *OrderDetailResponse {
 	resp := OrderResponse{
-		ID:            uuidString(o.ID),
+		ID:            pgutil.UUIDString(o.ID),
 		OrderNumber:   o.OrderNumber,
 		Channel:       o.Channel,
 		Status:        o.Status,
@@ -610,7 +771,7 @@ func orderDetailToResponse(o db.GetOrderByIDRow, items []db.ListOrderItemsRow, h
 		resp.Note = &o.Note.String
 	}
 	if o.CreatedBy.Valid {
-		s := uuidString(o.CreatedBy)
+		s := pgutil.UUIDString(o.CreatedBy)
 		resp.CreatedBy = &s
 	}
 
@@ -618,6 +779,9 @@ func orderDetailToResponse(o db.GetOrderByIDRow, items []db.ListOrderItemsRow, h
 		OrderResponse: resp,
 		Items:         make([]OrderItemResponse, len(items)),
 		History:       make([]StatusHistoryResponse, len(history)),
+	}
+	if o.ConfirmedAt.Valid {
+		detail.ConfirmedAt = &o.ConfirmedAt.Time
 	}
 	if o.PackedAt.Valid {
 		detail.PackedAt = &o.PackedAt.Time
@@ -646,7 +810,7 @@ func orderDetailToResponse(o db.GetOrderByIDRow, items []db.ListOrderItemsRow, h
 
 func listRowToResponse(r db.ListOrdersRow) OrderResponse {
 	resp := OrderResponse{
-		ID:            uuidString(r.ID),
+		ID:            pgutil.UUIDString(r.ID),
 		OrderNumber:   r.OrderNumber,
 		Channel:       r.Channel,
 		Status:        r.Status,
@@ -672,7 +836,7 @@ func listRowToResponse(r db.ListOrdersRow) OrderResponse {
 		resp.Note = &r.Note.String
 	}
 	if r.CreatedBy.Valid {
-		s := uuidString(r.CreatedBy)
+		s := pgutil.UUIDString(r.CreatedBy)
 		resp.CreatedBy = &s
 	}
 	return resp
@@ -680,7 +844,7 @@ func listRowToResponse(r db.ListOrdersRow) OrderResponse {
 
 func updateRowToResponse(r db.UpdateOrderRow) *OrderResponse {
 	resp := &OrderResponse{
-		ID:            uuidString(r.ID),
+		ID:            pgutil.UUIDString(r.ID),
 		OrderNumber:   r.OrderNumber,
 		Channel:       r.Channel,
 		Status:        r.Status,
@@ -714,7 +878,7 @@ func updateRowToResponse(r db.UpdateOrderRow) *OrderResponse {
 func createItemToResponse(r db.CreateOrderItemRow) OrderItemResponse {
 	return OrderItemResponse{
 		ID:             r.ID,
-		SKUID:          uuidString(r.SkuID),
+		SKUID:          pgutil.UUIDString(r.SkuID),
 		SKUCode:        r.SkuCode,
 		Name:           r.Name,
 		Quantity:       r.Quantity,
@@ -727,7 +891,7 @@ func createItemToResponse(r db.CreateOrderItemRow) OrderItemResponse {
 func listItemToResponse(r db.ListOrderItemsRow) OrderItemResponse {
 	return OrderItemResponse{
 		ID:             r.ID,
-		SKUID:          uuidString(r.SkuID),
+		SKUID:          pgutil.UUIDString(r.SkuID),
 		SKUCode:        r.SkuCode,
 		Name:           r.Name,
 		Quantity:       r.Quantity,
@@ -750,7 +914,7 @@ func historyToResponse(h db.OrderStatusHistory) StatusHistoryResponse {
 		resp.Note = &h.Note.String
 	}
 	if h.ChangedBy.Valid {
-		s := uuidString(h.ChangedBy)
+		s := pgutil.UUIDString(h.ChangedBy)
 		resp.ChangedBy = &s
 	}
 	return resp
@@ -773,7 +937,7 @@ func optText(s string) pgtype.Text {
 }
 
 // toNumeric converts float64 to pgtype.Numeric via string representation.
-// pgtype.Numeric.Scan accepts string input (see pgx v5 pgtype/numeric.go).
+// pgtype.Numeric.Scan accepts string input (pgx v5 pgtype/numeric.go).
 func toNumeric(f float64) pgtype.Numeric {
 	var n pgtype.Numeric
 	_ = n.Scan(strconv.FormatFloat(f, 'f', -1, 64))
@@ -782,7 +946,7 @@ func toNumeric(f float64) pgtype.Numeric {
 
 // numericToFloat converts pgtype.Numeric → float64.
 // Formula: value = Int * 10^Exp
-// Uses big.Rat for Exp < 0 (decimal values like prices).
+// Uses big.Rat for negative exponents (typical for prices: NUMERIC(15,2) → Exp=-2).
 func numericToFloat(n pgtype.Numeric) float64 {
 	if !n.Valid || n.NaN || n.Int == nil {
 		return 0
@@ -793,32 +957,9 @@ func numericToFloat(n pgtype.Numeric) float64 {
 		f, _ := new(big.Float).SetInt(val).Float64()
 		return f
 	}
-	// negative exponent (common for prices: NUMERIC(15,2) → Exp=-2)
+	// negative exponent (ราคา: 10050 * 10^-2 = 100.50)
 	div := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(-n.Exp)), nil)
 	rat := new(big.Rat).SetFrac(n.Int, div)
 	f, _ := rat.Float64()
 	return f
-}
-
-func uuidString(u pgtype.UUID) string {
-	if !u.Valid {
-		return ""
-	}
-	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
-		u.Bytes[0:4],
-		u.Bytes[4:6],
-		u.Bytes[6:8],
-		u.Bytes[8:10],
-		u.Bytes[10:16],
-	)
-}
-
-func normalizePagination(page, limit int) (p, l, offset int) {
-	if page < 1 {
-		page = 1
-	}
-	if limit < 1 || limit > 100 {
-		limit = 20
-	}
-	return page, limit, (page - 1) * limit
 }

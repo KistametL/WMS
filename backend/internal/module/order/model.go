@@ -34,7 +34,7 @@ var validTransitions = map[string][]string{
 }
 
 // reservedStatuses คือ statuses ที่ stock ถูก reserve ไว้แล้ว
-// ถ้า cancel จาก status เหล่านี้ ต้อง unreserve กลับ
+// ถ้า cancel จาก status เหล่านี้ ต้อง unreserve stock กลับ
 var reservedStatuses = map[string]bool{
 	StatusConfirmed:   true,
 	StatusPicking:     true,
@@ -78,6 +78,7 @@ type OrderResponse struct {
 
 type OrderDetailResponse struct {
 	OrderResponse
+	ConfirmedAt  *time.Time              `json:"confirmed_at,omitempty"`
 	PackedAt     *time.Time              `json:"packed_at,omitempty"`
 	ShippedAt    *time.Time              `json:"shipped_at,omitempty"`
 	DeliveredAt  *time.Time              `json:"delivered_at,omitempty"`
@@ -141,8 +142,11 @@ type UpdateOrderRequest struct {
 	Note            *string         `json:"note"`
 }
 
+// UpdateStatusRequest — body สำหรับ POST /orders/:id/status
+// status ต้องเป็นหนึ่งใน valid statuses เท่านั้น (oneof)
+// เพื่อ cancel ควรใช้ POST /orders/:id/cancel แทน (มี reason field)
 type UpdateStatusRequest struct {
-	Status string  `json:"status" binding:"required"`
+	Status string  `json:"status" binding:"required,oneof=confirmed picking packing ready_to_ship shipped delivered completed cancelled"`
 	Note   *string `json:"note"`
 }
 

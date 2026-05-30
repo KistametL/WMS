@@ -52,7 +52,7 @@ func (s *Service) GetStockBySKU(ctx context.Context, skuID string) (*StockLevelR
 }
 
 func (s *Service) ListStock(ctx context.Context, q ListStockQuery) (*ListResponse[StockLevelResponse], error) {
-	page, limit, offset := normalizePagination(q.Page, q.Limit)
+	page, limit, offset := pgutil.NormalizePagination(q.Page, q.Limit)
 
 	var lowStockOnly pgtype.Bool
 	if q.LowStockOnly != nil {
@@ -206,7 +206,7 @@ func (s *Service) GetMovement(ctx context.Context, id int64) (*MovementResponse,
 }
 
 func (s *Service) ListMovements(ctx context.Context, q ListMovementsQuery) (*ListResponse[MovementResponse], error) {
-	page, limit, offset := normalizePagination(q.Page, q.Limit)
+	page, limit, offset := pgutil.NormalizePagination(q.Page, q.Limit)
 
 	var skuPgID pgtype.UUID
 	if q.SKUID != "" {
@@ -380,7 +380,7 @@ func movementToResponse(m db.InventoryStockMovement) *MovementResponse {
 		r.Note = &m.Note.String
 	}
 	if m.CreatedBy.Valid {
-		s := uuidString(m.CreatedBy)
+		s := pgutil.UUIDString(m.CreatedBy)
 		r.CreatedBy = &s
 	}
 	return r
@@ -393,29 +393,4 @@ func toText(s *string) pgtype.Text {
 		return pgtype.Text{}
 	}
 	return pgtype.Text{String: *s, Valid: true}
-}
-
-func uuidString(u pgtype.UUID) string {
-	// pgtype.UUID.String() returns "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-	// when Valid is true; "{}" when invalid.
-	if !u.Valid {
-		return ""
-	}
-	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
-		u.Bytes[0:4],
-		u.Bytes[4:6],
-		u.Bytes[6:8],
-		u.Bytes[8:10],
-		u.Bytes[10:16],
-	)
-}
-
-func normalizePagination(page, limit int) (p, l, offset int) {
-	if page < 1 {
-		page = 1
-	}
-	if limit < 1 || limit > 100 {
-		limit = 20
-	}
-	return page, limit, (page - 1) * limit
 }
