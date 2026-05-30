@@ -30,9 +30,3 @@ type RefreshResponse struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-type JWTClaims struct {
-	UserID      string   `json:"user_id"`
-	Email       string   `json:"email"`
-	Roles       []string `json:"roles"`
-	Permissions []string `json:"permissions"`
-}

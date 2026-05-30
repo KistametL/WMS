@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
-	"strconv"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/KistametL/WMS/backend/internal/config"
 	db "github.com/KistametL/WMS/backend/internal/database/generated"
+	"github.com/KistametL/WMS/backend/internal/pgutil"
 )
 
 var (
@@ -78,12 +78,10 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 		return nil, err
 	}
 
-	expireHours, _ := strconv.Atoi(s.cfg.JWT.ExpireHours)
-
 	return &LoginResponse{
 		TokenType:    "Bearer",
 		AccessToken:  accessToken,
-		ExpiresIn:    expireHours * 3600, // แปลงชั่วโมง → วินาที
+		ExpiresIn:    s.cfg.JWT.ExpireHours * 3600, // hours → seconds
 		RefreshToken: refreshToken,
 		UserID:       user.ID.String(),
 		Email:        user.Email,
@@ -110,8 +108,15 @@ func (s *Service) RefreshToken(ctx context.Context, req RefreshRequest) (*Refres
 		return nil, err
 	}
 
-	roles, _ := s.queries.GetUserRoles(ctx, user.ID)
-	permissions, _ := s.queries.GetUserPermissions(ctx, user.ID)
+	roles, err := s.queries.GetUserRoles(ctx, user.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	permissions, err := s.queries.GetUserPermissions(ctx, user.ID)
+	if err != nil {
+		return nil, err
+	}
 
 	roleNames := make([]string, len(roles))
 	for i, r := range roles {
@@ -130,12 +135,10 @@ func (s *Service) RefreshToken(ctx context.Context, req RefreshRequest) (*Refres
 		return nil, err
 	}
 
-	expireHours, _ := strconv.Atoi(s.cfg.JWT.ExpireHours)
-
 	return &RefreshResponse{
 		TokenType:    "Bearer",
 		AccessToken:  accessToken,
-		ExpiresIn:    expireHours * 3600,
+		ExpiresIn:    s.cfg.JWT.ExpireHours * 3600, // hours → seconds
 		RefreshToken: newRefreshToken,
 	}, nil
 }
@@ -145,14 +148,12 @@ func (s *Service) Logout(ctx context.Context, refreshToken string) error {
 }
 
 func (s *Service) generateAccessToken(userID, email string, roles, permissions []string) (string, error) {
-	expireHours, _ := strconv.Atoi(s.cfg.JWT.ExpireHours)
-
 	claims := jwt.MapClaims{
 		"user_id":     userID,
 		"email":       email,
 		"roles":       roles,
 		"permissions": permissions,
-		"exp":         time.Now().Add(time.Duration(expireHours) * time.Hour).Unix(),
+		"exp":         time.Now().Add(time.Duration(s.cfg.JWT.ExpireHours) * time.Hour).Unix(),
 		"iat":         time.Now().Unix(),
 	}
 
@@ -161,15 +162,13 @@ func (s *Service) generateAccessToken(userID, email string, roles, permissions [
 }
 
 func (s *Service) createRefreshToken(ctx context.Context, userID string) (string, error) {
-	expireDays, _ := strconv.Atoi(s.cfg.JWT.RefreshExpireDays)
-
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
 		return "", err
 	}
 	plainToken := base64.URLEncoding.EncodeToString(raw)
 
-	pgUserID, err := parseUUID(userID)
+	pgUserID, err := pgutil.ParseUUID(userID)
 	if err != nil {
 		return "", err
 	}
@@ -177,7 +176,7 @@ func (s *Service) createRefreshToken(ctx context.Context, userID string) (string
 	_, err = s.queries.CreateRefreshToken(ctx, db.CreateRefreshTokenParams{
 		UserID:    pgUserID,
 		TokenHash: hashToken(plainToken),
-		ExpiresAt: pgTimestamp(time.Now().Add(time.Duration(expireDays) * 24 * time.Hour)),
+		ExpiresAt: pgTimestamp(time.Now().Add(time.Duration(s.cfg.JWT.RefreshExpireDays) * 24 * time.Hour)),
 	})
 	if err != nil {
 		return "", err

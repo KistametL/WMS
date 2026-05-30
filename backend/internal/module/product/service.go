@@ -6,10 +6,12 @@ import (
 	"strconv"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	db "github.com/KistametL/WMS/backend/internal/database/generated"
+	"github.com/KistametL/WMS/backend/internal/pgutil"
 )
 
 var (
@@ -273,7 +275,7 @@ func (s *Service) ListProducts(ctx context.Context, q ListProductsQuery) (*ListR
 }
 
 func (s *Service) GetProduct(ctx context.Context, id string) (*ProductDetailResponse, error) {
-	pgID, err := parseUUID(id)
+	pgID, err := pgutil.ParseUUID(id)
 	if err != nil {
 		return nil, ErrNotFound
 	}
@@ -329,7 +331,7 @@ func (s *Service) CreateProduct(ctx context.Context, req CreateProductRequest) (
 }
 
 func (s *Service) UpdateProduct(ctx context.Context, id string, req UpdateProductRequest, updatedByUserID string) (*ProductResponse, error) {
-	pgID, err := parseUUID(id)
+	pgID, err := pgutil.ParseUUID(id)
 	if err != nil {
 		return nil, ErrNotFound
 	}
@@ -362,7 +364,7 @@ func (s *Service) UpdateProduct(ctx context.Context, id string, req UpdateProduc
 }
 
 func (s *Service) DeleteProduct(ctx context.Context, id string) error {
-	pgID, err := parseUUID(id)
+	pgID, err := pgutil.ParseUUID(id)
 	if err != nil {
 		return ErrNotFound
 	}
@@ -379,13 +381,13 @@ func (s *Service) listSKUs(ctx context.Context, productID pgtype.UUID) ([]SKURes
 
 	result := make([]SKUResponse, len(rows))
 	for i, r := range rows {
-		result[i] = toSKUResponse(r)
+		result[i] = listSKURowToResponse(r)
 	}
 	return result, nil
 }
 
 func (s *Service) CreateSKU(ctx context.Context, productID string, req CreateSKURequest) (*SKUResponse, error) {
-	pgProductID, err := parseUUID(productID)
+	pgProductID, err := pgutil.ParseUUID(productID)
 	if err != nil {
 		return nil, ErrNotFound
 	}
@@ -412,12 +414,12 @@ func (s *Service) CreateSKU(ctx context.Context, productID string, req CreateSKU
 		return nil, err
 	}
 
-	res := toSKUResponse(row)
+	res := createSKURowToResponse(row)
 	return &res, nil
 }
 
 func (s *Service) UpdateSKU(ctx context.Context, id string, req UpdateSKURequest, updatedByUserID string) (*SKUResponse, error) {
-	pgID, err := parseUUID(id)
+	pgID, err := pgutil.ParseUUID(id)
 	if err != nil {
 		return nil, ErrNotFound
 	}
@@ -449,40 +451,40 @@ func (s *Service) UpdateSKU(ctx context.Context, id string, req UpdateSKURequest
 		return nil, err
 	}
 
-	res := toSKUResponse(row)
+	res := updateSKURowToResponse(row)
 	return &res, nil
 }
 
 func (s *Service) DeleteSKU(ctx context.Context, id string) error {
-	pgID, err := parseUUID(id)
+	pgID, err := pgutil.ParseUUID(id)
 	if err != nil {
 		return ErrNotFound
 	}
 	return s.queries.SoftDeleteSKU(ctx, pgID)
 }
 
-// ── Internal helpers ──────────────────────────────────────────────
+// ── SKU row converters ────────────────────────────────────────────
+//
+// Each DB query returns a distinct struct type, so we use a small typed
+// adapter per query rather than a single interface{} type-switch.
+// This is explicit, compile-time safe, and has no silent fallback path.
 
-func toSKUResponse(r interface{}) SKUResponse {
-	switch v := r.(type) {
-	case db.CreateSKURow:
-		return skuRowToResponse(v.ID, v.ProductID, v.SkuCode, v.Name,
-			v.CostPrice, v.SellingPrice, v.CompareAtPrice,
-			v.WeightGrams, v.Attributes, v.IsActive, v.UpdatedBy, v.CreatedAt, v.UpdatedAt)
-	case db.UpdateSKURow:
-		return skuRowToResponse(v.ID, v.ProductID, v.SkuCode, v.Name,
-			v.CostPrice, v.SellingPrice, v.CompareAtPrice,
-			v.WeightGrams, v.Attributes, v.IsActive, v.UpdatedBy, v.CreatedAt, v.UpdatedAt)
-	case db.ListSKUsByProductRow:
-		return skuRowToResponse(v.ID, v.ProductID, v.SkuCode, v.Name,
-			v.CostPrice, v.SellingPrice, v.CompareAtPrice,
-			v.WeightGrams, v.Attributes, v.IsActive, v.UpdatedBy, v.CreatedAt, v.UpdatedAt)
-	case db.GetSKUByIDRow:
-		return skuRowToResponse(v.ID, v.ProductID, v.SkuCode, v.Name,
-			v.CostPrice, v.SellingPrice, v.CompareAtPrice,
-			v.WeightGrams, v.Attributes, v.IsActive, v.UpdatedBy, v.CreatedAt, v.UpdatedAt)
-	}
-	return SKUResponse{}
+func listSKURowToResponse(r db.ListSKUsByProductRow) SKUResponse {
+	return skuRowToResponse(r.ID, r.ProductID, r.SkuCode, r.Name,
+		r.CostPrice, r.SellingPrice, r.CompareAtPrice,
+		r.WeightGrams, r.Attributes, r.IsActive, r.UpdatedBy, r.CreatedAt, r.UpdatedAt)
+}
+
+func createSKURowToResponse(r db.CreateSKURow) SKUResponse {
+	return skuRowToResponse(r.ID, r.ProductID, r.SkuCode, r.Name,
+		r.CostPrice, r.SellingPrice, r.CompareAtPrice,
+		r.WeightGrams, r.Attributes, r.IsActive, r.UpdatedBy, r.CreatedAt, r.UpdatedAt)
+}
+
+func updateSKURowToResponse(r db.UpdateSKURow) SKUResponse {
+	return skuRowToResponse(r.ID, r.ProductID, r.SkuCode, r.Name,
+		r.CostPrice, r.SellingPrice, r.CompareAtPrice,
+		r.WeightGrams, r.Attributes, r.IsActive, r.UpdatedBy, r.CreatedAt, r.UpdatedAt)
 }
 
 func skuRowToResponse(
@@ -512,11 +514,7 @@ func skuRowToResponse(
 	}
 }
 
-func parseUUID(s string) (pgtype.UUID, error) {
-	var id pgtype.UUID
-	err := id.Scan(s)
-	return id, err
-}
+// ── Internal helpers ──────────────────────────────────────────────
 
 func nilIfEmpty(s string) *string {
 	if s == "" {
@@ -525,21 +523,10 @@ func nilIfEmpty(s string) *string {
 	return &s
 }
 
+// isDuplicateError reports whether err is a PostgreSQL unique_violation (23505).
+// Uses errors.AsType (Go 1.26) for type-safe unwrapping instead of fragile
+// string matching on the error message.
 func isDuplicateError(err error) bool {
-	return err != nil && len(err.Error()) > 0 &&
-		containsString(err.Error(), "duplicate key")
-}
-
-func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr ||
-		len(s) > 0 && findString(s, substr))
-}
-
-func findString(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+	pgErr, ok := errors.AsType[*pgconn.PgError](err)
+	return ok && pgErr.Code == "23505" // unique_violation per PostgreSQL SQLSTATE
 }

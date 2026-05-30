@@ -22,8 +22,8 @@ type Querier interface {
 	GetProductByID(ctx context.Context, id pgtype.UUID) (GetProductByIDRow, error)
 	GetRefreshToken(ctx context.Context, tokenHash string) (GetRefreshTokenRow, error)
 	GetSKUByID(ctx context.Context, id pgtype.UUID) (GetSKUByIDRow, error)
-	GetUserByEmail(ctx context.Context, email string) (AuthUser, error)
-	GetUserByID(ctx context.Context, id pgtype.UUID) (AuthUser, error)
+	GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error)
+	GetUserByID(ctx context.Context, id pgtype.UUID) (GetUserByIDRow, error)
 	GetUserPermissions(ctx context.Context, userID pgtype.UUID) ([]string, error)
 	GetUserRoles(ctx context.Context, userID pgtype.UUID) ([]GetUserRolesRow, error)
 	// ══════════════════════════════════════════════════════════════════
