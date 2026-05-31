@@ -119,3 +119,17 @@ type UpdateSKURequest struct {
 	Attributes     json.RawMessage `json:"attributes"`
 	IsActive       *bool           `json:"is_active"`
 }
+
+// ── SKU Label ─────────────────────────────────────────────────────
+
+// SKULabelResponse — ใช้สำหรับ GET /skus/:id/label
+// backend return ข้อมูลดิบ → frontend render barcode + print
+type SKULabelResponse struct {
+	SKUID        string  `json:"sku_id"`
+	SKUCode      string  `json:"sku_code"`
+	Name         string  `json:"name"`
+	BarcodeValue string  `json:"barcode_value"` // ค่าที่ encode เป็น barcode (= sku_code)
+	BarcodeType  string  `json:"barcode_type"`  // "CODE128"
+	SellingPrice float64 `json:"selling_price"`
+	CostPrice    float64 `json:"cost_price"`
+}

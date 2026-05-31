@@ -5,6 +5,8 @@ package pgutil
 
 import (
 	"fmt"
+	"math/big"
+	"strconv"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -44,4 +46,49 @@ func NormalizePagination(page, limit int) (p, l, offset int) {
 		limit = 20
 	}
 	return page, limit, (page - 1) * limit
+}
+
+// NumericToFloat converts pgtype.Numeric → float64.
+// Formula: value = Int × 10^Exp
+// Uses big.Rat for negative exponents (typical for prices: NUMERIC(15,2) → Exp=-2).
+// Returns 0 for NULL, NaN, or Infinity values.
+func NumericToFloat(n pgtype.Numeric) float64 {
+	if !n.Valid || n.NaN || n.InfinityModifier != pgtype.Finite || n.Int == nil {
+		return 0
+	}
+	if n.Exp >= 0 {
+		exp := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(n.Exp)), nil)
+		val := new(big.Int).Mul(n.Int, exp)
+		f, _ := new(big.Float).SetInt(val).Float64()
+		return f
+	}
+	// negative exponent (e.g. price: 10050 × 10^-2 = 100.50)
+	div := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(-n.Exp)), nil)
+	rat := new(big.Rat).SetFrac(n.Int, div)
+	f, _ := rat.Float64()
+	return f
+}
+
+// ToNumeric converts float64 → pgtype.Numeric via string representation.
+// pgtype.Numeric.Scan accepts string input (pgx v5).
+func ToNumeric(f float64) pgtype.Numeric {
+	var n pgtype.Numeric
+	_ = n.Scan(strconv.FormatFloat(f, 'f', -1, 64))
+	return n
+}
+
+// ToText converts *string → pgtype.Text (NULL when nil).
+func ToText(s *string) pgtype.Text {
+	if s == nil {
+		return pgtype.Text{}
+	}
+	return pgtype.Text{String: *s, Valid: true}
+}
+
+// OptText returns a valid pgtype.Text for non-empty strings, NULL otherwise.
+func OptText(s string) pgtype.Text {
+	if s == "" {
+		return pgtype.Text{}
+	}
+	return pgtype.Text{String: s, Valid: true}
 }

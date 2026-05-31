@@ -531,6 +531,33 @@ func skuRowToResponse(
 	}
 }
 
+// GetSKULabel returns label data for a SKU (barcode value + price).
+// Backend returns raw data — frontend renders barcode + sends to printer.
+func (s *Service) GetSKULabel(ctx context.Context, id string) (*SKULabelResponse, error) {
+	pgID, err := pgutil.ParseUUID(id)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+
+	sku, err := s.queries.GetSKUByID(ctx, pgID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	return &SKULabelResponse{
+		SKUID:        pgutil.UUIDString(sku.ID),
+		SKUCode:      sku.SkuCode,
+		Name:         sku.Name,
+		BarcodeValue: sku.SkuCode, // ใช้ sku_code เป็น barcode value
+		BarcodeType:  "CODE128",
+		SellingPrice: numericToFloat(sku.SellingPrice),
+		CostPrice:    numericToFloat(sku.CostPrice),
+	}, nil
+}
+
 // ── Internal helpers ──────────────────────────────────────────────
 
 func nilIfEmpty(s string) *string {

@@ -45,11 +45,12 @@ func (h *Handler) RegisterRoutes(protected *gin.RouterGroup) {
 		prods.POST("/:id/skus", middleware.RequirePermission("product:write"), h.CreateSKU)
 	}
 
-	// ── SKUs (top-level for PATCH / DELETE by SKU ID) ─────────────────
+	// ── SKUs (top-level for PATCH / DELETE / label by SKU ID) ────────
 	skus := protected.Group("/skus")
 	{
 		skus.PATCH("/:id", middleware.RequirePermission("product:write"), h.UpdateSKU)
 		skus.DELETE("/:id", middleware.RequirePermission("product:write"), h.DeleteSKU)
+		skus.GET("/:id/label", middleware.RequirePermission("product:read"), h.GetSKULabel)
 	}
 }
 
@@ -297,6 +298,24 @@ func (h *Handler) DeleteSKU(c *gin.Context) {
 		return
 	}
 	response.OK(c, gin.H{"message": "sku deleted"})
+}
+
+// GetSKULabel godoc
+// GET /skus/:id/label
+// ส่งคืน barcode value + price สำหรับ print label ติดสินค้า / shelf
+func (h *Handler) GetSKULabel(c *gin.Context) {
+	id := c.Param("id")
+
+	result, err := h.service.GetSKULabel(c.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.NotFound(c, "sku not found")
+			return
+		}
+		response.InternalError(c)
+		return
+	}
+	response.OK(c, result)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

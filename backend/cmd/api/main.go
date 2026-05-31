@@ -12,6 +12,7 @@ import (
 	"github.com/KistametL/WMS/backend/internal/database"
 	"github.com/KistametL/WMS/backend/internal/middleware"
 	"github.com/KistametL/WMS/backend/internal/module/auth"
+	"github.com/KistametL/WMS/backend/internal/module/fulfillment"
 	"github.com/KistametL/WMS/backend/internal/module/inventory"
 	"github.com/KistametL/WMS/backend/internal/module/order"
 	"github.com/KistametL/WMS/backend/internal/module/product"
@@ -81,6 +82,11 @@ func main() {
 		orderService := order.NewService(pool)
 		orderHandler := order.NewHandler(orderService)
 		orderHandler.RegisterRoutes(protected)
+
+		// Fulfillment module — pick → pack → ship workflow + SKU labels
+		fulfillmentService := fulfillment.NewService(pool)
+		fulfillmentHandler := fulfillment.NewHandler(fulfillmentService)
+		fulfillmentHandler.RegisterRoutes(protected)
 	}
 
 	addr := fmt.Sprintf(":%s", cfg.AppPort)

@@ -11,6 +11,7 @@ import (
 )
 
 type Querier interface {
+	CountFulfillmentOrders(ctx context.Context, status string) (int64, error)
 	CountOrders(ctx context.Context, arg CountOrdersParams) (int64, error)
 	CountProducts(ctx context.Context, arg CountProductsParams) (int64, error)
 	CountStockLevels(ctx context.Context, lowStockOnly pgtype.Bool) (int64, error)
@@ -29,6 +30,10 @@ type Querier interface {
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (CreateRefreshTokenRow, error)
 	CreateSKU(ctx context.Context, arg CreateSKUParams) (CreateSKURow, error)
 	// ══════════════════════════════════════════════════════════════════
+	// SHIPMENTS
+	// ══════════════════════════════════════════════════════════════════
+	CreateShipment(ctx context.Context, arg CreateShipmentParams) (FulfillmentShipment, error)
+	// ══════════════════════════════════════════════════════════════════
 	// STATUS HISTORY
 	// ══════════════════════════════════════════════════════════════════
 	CreateStatusHistory(ctx context.Context, arg CreateStatusHistoryParams) error
@@ -46,6 +51,7 @@ type Querier interface {
 	GetProductByID(ctx context.Context, id pgtype.UUID) (GetProductByIDRow, error)
 	GetRefreshToken(ctx context.Context, tokenHash string) (GetRefreshTokenRow, error)
 	GetSKUByID(ctx context.Context, id pgtype.UUID) (GetSKUByIDRow, error)
+	GetShipmentByOrderID(ctx context.Context, orderID pgtype.UUID) (FulfillmentShipment, error)
 	// ══════════════════════════════════════════════════════════════════
 	// STOCK LEVELS
 	// ══════════════════════════════════════════════════════════════════
@@ -67,6 +73,11 @@ type Querier interface {
 	// CATEGORIES
 	// ══════════════════════════════════════════════════════════════════
 	ListCategories(ctx context.Context) ([]ListCategoriesRow, error)
+	// ══════════════════════════════════════════════════════════════════
+	// FULFILLMENT QUEUE
+	// sorted ASC: oldest order first = highest priority for warehouse staff
+	// ══════════════════════════════════════════════════════════════════
+	ListFulfillmentOrders(ctx context.Context, arg ListFulfillmentOrdersParams) ([]ListFulfillmentOrdersRow, error)
 	ListOrderItems(ctx context.Context, orderID pgtype.UUID) ([]ListOrderItemsRow, error)
 	ListOrders(ctx context.Context, arg ListOrdersParams) ([]ListOrdersRow, error)
 	// ══════════════════════════════════════════════════════════════════

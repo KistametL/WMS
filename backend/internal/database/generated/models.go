@@ -109,6 +109,21 @@ type ChannelSyncLog struct {
 	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
 }
 
+type FulfillmentShipment struct {
+	ID             pgtype.UUID        `json:"id"`
+	OrderID        pgtype.UUID        `json:"order_id"`
+	Courier        string             `json:"courier"`
+	TrackingNumber string             `json:"tracking_number"`
+	LabelUrl       pgtype.Text        `json:"label_url"`
+	PickedBy       pgtype.UUID        `json:"picked_by"`
+	PackedBy       pgtype.UUID        `json:"packed_by"`
+	ShippedBy      pgtype.UUID        `json:"shipped_by"`
+	PickedAt       pgtype.Timestamptz `json:"picked_at"`
+	PackedAt       pgtype.Timestamptz `json:"packed_at"`
+	ShippedAt      pgtype.Timestamptz `json:"shipped_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
 type InventoryStockLevel struct {
 	ID                int64              `json:"id"`
 	SkuID             pgtype.UUID        `json:"sku_id"`
