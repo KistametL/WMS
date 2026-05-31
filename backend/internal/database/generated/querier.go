@@ -12,6 +12,8 @@ import (
 
 type Querier interface {
 	AssignRole(ctx context.Context, arg AssignRoleParams) error
+	// จำนวน SKU ที่ active อยู่ในระบบ
+	CountActiveSKUs(ctx context.Context) (int64, error)
 	CountFulfillmentOrders(ctx context.Context, status string) (int64, error)
 	CountOrders(ctx context.Context, arg CountOrdersParams) (int64, error)
 	CountProducts(ctx context.Context, arg CountProductsParams) (int64, error)
@@ -44,17 +46,37 @@ type Querier interface {
 	// ══════════════════════════════════════════════════════════════════
 	CreateStockMovement(ctx context.Context, arg CreateStockMovementParams) (InventoryStockMovement, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
+	// ยอด COD ที่ยังไม่ได้เก็บเงิน (is_cod=true, ยังไม่ shipped/delivered/completed/cancelled)
+	GetCODPending(ctx context.Context) (GetCODPendingRow, error)
 	GetCategoryByID(ctx context.Context, id int32) (GetCategoryByIDRow, error)
+	// จำนวนออเดอร์ในแต่ละขั้นตอน fulfillment ปัจจุบัน
+	GetFulfillmentQueueSizes(ctx context.Context) (GetFulfillmentQueueSizesRow, error)
 	GetOrderByID(ctx context.Context, id pgtype.UUID) (GetOrderByIDRow, error)
 	// ล็อก orders row ด้วย SELECT FOR UPDATE
 	// ใช้ภายใน transaction ที่ต้องการ serialize การเปลี่ยน status
 	// (เช่น confirm, cancel) เพื่อป้องกัน TOCTOU race condition
 	GetOrderByIDForUpdate(ctx context.Context, id pgtype.UUID) (GetOrderByIDForUpdateRow, error)
+	// นับออเดอร์แยกตาม status ทั้งหมด (ทุก status ไม่ใช่แค่ active)
+	GetOrderStatusBreakdown(ctx context.Context) ([]GetOrderStatusBreakdownRow, error)
+	// ══════════════════════════════════════════════════════════════════
+	// DASHBOARD
+	// ══════════════════════════════════════════════════════════════════
+	// ดึงข้อมูล aggregate จาก tables ที่มีอยู่แล้ว — ไม่ต้องมี migration ใหม่
+	// ทุก query ใช้ NOW() AT TIME ZONE 'Asia/Bangkok' เพื่อให้ตรงกับเวลาไทย
+	// ══════════════════════════════════════════════════════════════════
+	// KPI: จำนวนออเดอร์ + revenue วันนี้ / สัปดาห์นี้ / เดือนนี้
+	// กรอง status != cancelled เพราะ cancelled ไม่นับเป็น revenue
+	GetOrdersOverview(ctx context.Context) (GetOrdersOverviewRow, error)
 	GetProductByID(ctx context.Context, id pgtype.UUID) (GetProductByIDRow, error)
+	// ออเดอร์ล่าสุด 10 รายการ (ทุก status)
+	GetRecentOrders(ctx context.Context) ([]GetRecentOrdersRow, error)
 	GetRefreshToken(ctx context.Context, tokenHash string) (GetRefreshTokenRow, error)
 	GetRoleByID(ctx context.Context, id int32) (GetRoleByIDRow, error)
 	GetSKUByID(ctx context.Context, id pgtype.UUID) (GetSKUByIDRow, error)
 	GetShipmentByOrderID(ctx context.Context, orderID pgtype.UUID) (FulfillmentShipment, error)
+	// SKU ที่ qty_available <= low_stock_threshold หรือ = 0
+	// JOIN product เพื่อแสดงชื่อสินค้า
+	GetStockAlerts(ctx context.Context) ([]GetStockAlertsRow, error)
 	// ══════════════════════════════════════════════════════════════════
 	// STOCK LEVELS
 	// ══════════════════════════════════════════════════════════════════

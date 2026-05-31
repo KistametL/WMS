@@ -12,6 +12,7 @@ import (
 	"github.com/KistametL/WMS/backend/internal/database"
 	"github.com/KistametL/WMS/backend/internal/middleware"
 	"github.com/KistametL/WMS/backend/internal/module/auth"
+	"github.com/KistametL/WMS/backend/internal/module/dashboard"
 	"github.com/KistametL/WMS/backend/internal/module/fulfillment"
 	"github.com/KistametL/WMS/backend/internal/module/inventory"
 	"github.com/KistametL/WMS/backend/internal/module/order"
@@ -93,6 +94,11 @@ func main() {
 		userService := user.NewService(pool)
 		userHandler := user.NewHandler(userService)
 		userHandler.RegisterRoutes(protected)
+
+		// Dashboard module — overview KPIs, order breakdown, fulfillment queue, stock alerts
+		dashboardService := dashboard.NewService(pool)
+		dashboardHandler := dashboard.NewHandler(dashboardService)
+		dashboardHandler.RegisterRoutes(protected)
 	}
 
 	addr := fmt.Sprintf(":%s", cfg.AppPort)
