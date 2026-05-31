@@ -16,6 +16,7 @@ import (
 	"github.com/KistametL/WMS/backend/internal/module/inventory"
 	"github.com/KistametL/WMS/backend/internal/module/order"
 	"github.com/KistametL/WMS/backend/internal/module/product"
+	"github.com/KistametL/WMS/backend/internal/module/user"
 	"github.com/KistametL/WMS/backend/pkg/response"
 )
 
@@ -87,6 +88,11 @@ func main() {
 		fulfillmentService := fulfillment.NewService(pool)
 		fulfillmentHandler := fulfillment.NewHandler(fulfillmentService)
 		fulfillmentHandler.RegisterRoutes(protected)
+
+		// User module — CRUD users, roles, password management
+		userService := user.NewService(pool)
+		userHandler := user.NewHandler(userService)
+		userHandler.RegisterRoutes(protected)
 	}
 
 	addr := fmt.Sprintf(":%s", cfg.AppPort)

@@ -11,11 +11,13 @@ import (
 )
 
 type Querier interface {
+	AssignRole(ctx context.Context, arg AssignRoleParams) error
 	CountFulfillmentOrders(ctx context.Context, status string) (int64, error)
 	CountOrders(ctx context.Context, arg CountOrdersParams) (int64, error)
 	CountProducts(ctx context.Context, arg CountProductsParams) (int64, error)
 	CountStockLevels(ctx context.Context, lowStockOnly pgtype.Bool) (int64, error)
 	CountStockMovements(ctx context.Context, arg CountStockMovementsParams) (int64, error)
+	CountUsers(ctx context.Context, arg CountUsersParams) (int64, error)
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) error
 	CreateCategory(ctx context.Context, arg CreateCategoryParams) (CreateCategoryRow, error)
 	// ══════════════════════════════════════════════════════════════════
@@ -50,6 +52,7 @@ type Querier interface {
 	GetOrderByIDForUpdate(ctx context.Context, id pgtype.UUID) (GetOrderByIDForUpdateRow, error)
 	GetProductByID(ctx context.Context, id pgtype.UUID) (GetProductByIDRow, error)
 	GetRefreshToken(ctx context.Context, tokenHash string) (GetRefreshTokenRow, error)
+	GetRoleByID(ctx context.Context, id int32) (GetRoleByIDRow, error)
 	GetSKUByID(ctx context.Context, id pgtype.UUID) (GetSKUByIDRow, error)
 	GetShipmentByOrderID(ctx context.Context, orderID pgtype.UUID) (FulfillmentShipment, error)
 	// ══════════════════════════════════════════════════════════════════
@@ -64,6 +67,11 @@ type Querier interface {
 	GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (GetUserByIDRow, error)
 	GetUserPermissions(ctx context.Context, userID pgtype.UUID) ([]string, error)
+	// ══════════════════════════════════════════════════════════════════
+	// USERS
+	// ══════════════════════════════════════════════════════════════════
+	// ใช้สำหรับ display — ไม่รวม password_hash
+	GetUserProfile(ctx context.Context, id pgtype.UUID) (GetUserProfileRow, error)
 	GetUserRoles(ctx context.Context, userID pgtype.UUID) ([]GetUserRolesRow, error)
 	// สร้าง stock level ด้วย qty=0 ถ้ายังไม่มี; ถ้ามีแล้วไม่เปลี่ยนค่า
 	// ON CONFLICT DO UPDATE ต้องเปลี่ยนอะไรบางอย่าง (PostgreSQL requirement)
@@ -85,17 +93,24 @@ type Querier interface {
 	// ══════════════════════════════════════════════════════════════════
 	ListProducts(ctx context.Context, arg ListProductsParams) ([]ListProductsRow, error)
 	// ══════════════════════════════════════════════════════════════════
+	// ROLES
+	// ══════════════════════════════════════════════════════════════════
+	ListRoles(ctx context.Context) ([]ListRolesRow, error)
+	// ══════════════════════════════════════════════════════════════════
 	// SKUs
 	// ══════════════════════════════════════════════════════════════════
 	ListSKUsByProduct(ctx context.Context, productID pgtype.UUID) ([]ListSKUsByProductRow, error)
 	ListStatusHistory(ctx context.Context, orderID pgtype.UUID) ([]OrderStatusHistory, error)
 	ListStockLevels(ctx context.Context, arg ListStockLevelsParams) ([]ListStockLevelsRow, error)
 	ListStockMovements(ctx context.Context, arg ListStockMovementsParams) ([]InventoryStockMovement, error)
+	ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUsersRow, error)
+	RemoveRole(ctx context.Context, arg RemoveRoleParams) error
 	RevokeAllUserTokens(ctx context.Context, userID pgtype.UUID) error
 	RevokeRefreshToken(ctx context.Context, tokenHash string) error
 	SoftDeleteCategory(ctx context.Context, id int32) error
 	SoftDeleteProduct(ctx context.Context, id pgtype.UUID) error
 	SoftDeleteSKU(ctx context.Context, id pgtype.UUID) error
+	SoftDeleteUser(ctx context.Context, id pgtype.UUID) error
 	UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (UpdateCategoryRow, error)
 	UpdateLowStockThreshold(ctx context.Context, arg UpdateLowStockThresholdParams) (InventoryStockLevel, error)
 	// ใช้สำหรับแก้ข้อมูล order (customer info, shipping, note)
@@ -104,11 +119,13 @@ type Querier interface {
 	UpdateOrder(ctx context.Context, arg UpdateOrderParams) (UpdateOrderRow, error)
 	// อัพเดต status + timestamp ที่เกี่ยวข้องอัตโนมัติ
 	UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) (UpdateOrderStatusRow, error)
+	UpdatePassword(ctx context.Context, arg UpdatePasswordParams) error
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (UpdateProductRow, error)
 	UpdateSKU(ctx context.Context, arg UpdateSKUParams) (UpdateSKURow, error)
 	// ใช้ภายใน transaction หลัง GetStockBySKUForUpdate
 	// caller รับผิดชอบตรวจสอบ qty_on_hand >= qty_reserved ก่อนเรียก
 	UpdateStockLevel(ctx context.Context, arg UpdateStockLevelParams) (InventoryStockLevel, error)
+	UpdateUser(ctx context.Context, arg UpdateUserParams) (UpdateUserRow, error)
 }
 
 var _ Querier = (*Queries)(nil)
