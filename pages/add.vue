@@ -1,16 +1,23 @@
 <template>
-  <div class="user-card">
-    <v-card>
-      <v-card-title>
-        <span class="headline">User Information</span>
-      </v-card-title>
-      <v-card-text>
-        <div>
-          <p><strong>Name:</strong> 123</p>
-          <p><strong>Email:</strong> 345</p>
-          <p><strong>Role:</strong> 567}</p>
-        </div>
-      </v-card-text>
-    </v-card>
-  </div>
+  <v-container style="padding: 0 8px">
+    <component :is="stepComponent" @next="currentStep = $event" />
+  </v-container>
 </template>
+
+<script setup>
+import SuggestionLocation from "~/pages/components/add/SuggestionLocation.vue";
+import LocationDestination from "~/pages/components/add/LocationDestination.vue";
+import Option from "~/pages/components/add/Options.vue";
+import AddProducts from "~/pages/components/add/AddProducts.vue";
+
+const currentStep = ref('suggestion')
+
+const stepComponent = computed(() => {
+  switch (currentStep.value) {
+    case 'suggestion': return SuggestionLocation
+    case 'location': return LocationDestination
+    case 'options': return Option
+    case 'add_product': return AddProducts
+  }
+})
+</script>

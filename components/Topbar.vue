@@ -1,8 +1,8 @@
 <template>
-  <v-app-bar app color="black" dark flat>
+  <v-app-bar app color="black" dark flat height="64" class="d-flex align-center">
 
     <div class="logo-center">
-      <img src="~/assets/images/425logo.jpeg" alt="Logo" style="height: 70px;" />
+      <img src="~/assets/images/425logo.jpeg" alt="Logo" style="height: 70px;cursor: pointer" @click="$router.push('/')" />
     </div>
 
     <v-spacer />

@@ -3,6 +3,7 @@
     <v-card
         @click="navigate"
         variant="tonal"
+        :ripple="false"
         class="d-flex flex-column align-center justify-center"
         style="width: 60px; height: 60px; border-radius: 10px; cursor: pointer; background-color: #f5f5f5;"
     >

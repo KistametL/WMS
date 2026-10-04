@@ -125,7 +125,7 @@ const handleLogin = async () => {
 
     authStore.setUser(userRes.User)
     authStore.setToken(accessToken)
-    await router.push('/test')
+    await router.push('/')
 
   } catch (err) {
     if (err?.status === 401) {
@@ -137,11 +137,6 @@ const handleLogin = async () => {
     loading.value = false
   }
 }
-
-onMounted(() => {
-  const auth = useAuthStore()
-  console.log('💾 Token from persisted state:', auth.token)
-})
 
 </script>
 
